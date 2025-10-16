@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>웹 크롤링 - 법률 블로그 시스템</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .status-card {
+            border-left: 4px solid #007bff;
+        }
+        .progress-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .log-container {
+            background: #1e1e1e;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- 네비게이션 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-gavel me-2"></i>법률 블로그 시스템
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/crawl">크롤링</a>
+                <a class="nav-link" href="/search">검색</a>
+                <a class="nav-link" href="/generate">블로그 생성</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-spider me-2"></i>네이버 블로그 크롤링</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            네이버 블로그에서 법률 관련 포스팅을 자동으로 수집합니다.
+                        </div>
+
+                        <!-- 크롤링 컨트롤 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <button id="startCrawlBtn" class="btn btn-primary btn-lg w-100">
+                                    <i class="fas fa-play me-2"></i>크롤링 시작
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <button id="stopCrawlBtn" class="btn btn-danger btn-lg w-100" disabled>
+                                    <i class="fas fa-stop me-2"></i>중지
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 진행률 -->
+                        <div class="progress-container">
+                            <h5>진행 상황</h5>
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div id="crawlProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%">
+                                    <span id="crawlProgressText">0%</span>
+                                </div>
+                            </div>
+                            <p id="crawlStatus" class="mb-0">대기 중...</p>
+                        </div>
+
+                        <!-- 로그 -->
+                        <div class="mt-4">
+                            <h5>실시간 로그</h5>
+                            <div id="crawlLog" class="log-container p-3">
+                                <div>시스템 준비 완료. 크롤링을 시작하려면 버튼을 클릭하세요.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <!-- 상태 카드 -->
+                <div class="card status-card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-line me-2"></i>크롤링 상태</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <h6 class="text-muted">상태</h6>
+                                <span id="statusBadge" class="badge bg-secondary">대기</span>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="text-muted">진행률</h6>
+                                <span id="statusProgress">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 크롤링 정보 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-info-circle me-2"></i>크롤링 정보</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success me-2"></i>자동 카테고리 분류</li>
+                            <li><i class="fas fa-check text-success me-2"></i>중복 제거</li>
+                            <li><i class="fas fa-check text-success me-2"></i>메타데이터 추출</li>
+                            <li><i class="fas fa-check text-success me-2"></i>실시간 진행률</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 다음 단계 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-arrow-right me-2"></i>다음 단계</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>크롤링 완료 후:</p>
+                        <ol>
+                            <li>벡터화 진행</li>
+                            <li>검색 시스템 활성화</li>
+                            <li>블로그 생성 기능 사용</li>
+                        </ol>
+                        <a href="/search" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-search me-2"></i>검색으로 이동
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let crawlInterval;
+        
+        // 크롤링 시작
+        document.getElementById('startCrawlBtn').addEventListener('click', async function() {
+            try {
+                const response = await fetch('/api/crawl', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.disabled = true;
+                    document.getElementById('stopCrawlBtn').disabled = false;
+                    addLog('크롤링을 시작했습니다...');
+                    
+                    // 상태 폴링 시작
+                    startStatusPolling();
+                } else {
+                    addLog('오류: ' + result.error);
+                }
+            } catch (error) {
+                addLog('오류: ' + error.message);
+            }
+        });
+
+        // 크롤링 중지
+        document.getElementById('stopCrawlBtn').addEventListener('click', function() {
+            if (crawlInterval) {
+                clearInterval(crawlInterval);
+            }
+            this.disabled = true;
+            document.getElementById('startCrawlBtn').disabled = false;
+            addLog('크롤링이 중지되었습니다.');
+        });
+
+        // 상태 폴링
+        function startStatusPolling() {
+            crawlInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/status');
+                    const status = await response.json();
+                    
+                    updateCrawlStatus(status.crawling_status);
+                } catch (error) {
+                    addLog('상태 확인 오류: ' + error.message);
+                }
+            }, 2000);
+        }
+
+        // 크롤링 상태 업데이트
+        function updateCrawlStatus(status) {
+            const progress = status.progress;
+            const message = status.message;
+            
+            // 진행률 업데이트
+            document.getElementById('crawlProgress').style.width = progress + '%';
+            document.getElementById('crawlProgressText').textContent = progress + '%';
+            document.getElementById('crawlStatus').textContent = message;
+            document.getElementById('statusProgress').textContent = progress + '%';
+            
+            // 상태 배지 업데이트
+            const statusBadge = document.getElementById('statusBadge');
+            statusBadge.className = 'badge';
+            
+            if (status.status === 'running') {
+                statusBadge.classList.add('bg-primary');
+                statusBadge.textContent = '진행 중';
+            } else if (status.status === 'completed') {
+                statusBadge.classList.add('bg-success');
+                statusBadge.textContent = '완료';
+                clearInterval(crawlInterval);
+                document.getElementById('startCrawlBtn').disabled = false;
+                document.getElementById('stopCrawlBtn').disabled = true;
+            } else if (status.status === 'error') {
+                statusBadge.classList.add('bg-danger');
+                statusBadge.textContent = '오류';
+                clearInterval(crawlInterval);
+                document.getElementById('startCrawlBtn').disabled = false;
+                document.getElementById('stopCrawlBtn').disabled = true;
+            }
+            
+            // 로그 추가
+            if (message !== document.getElementById('crawlStatus').getAttribute('data-last-message')) {
+                addLog(message);
+                document.getElementById('crawlStatus').setAttribute('data-last-message', message);
+            }
+        }
+
+        // 로그 추가
+        function addLog(message) {
+            const logContainer = document.getElementById('crawlLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // 페이지 로드 시 초기 상태 확인
+        window.addEventListener('load', async function() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                updateCrawlStatus(status.crawling_status);
+            } catch (error) {
+                addLog('초기 상태 확인 오류: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+

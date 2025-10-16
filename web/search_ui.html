@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>법률 블로그 검색</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+        
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1rem;
+        }
+        
+        .search-section {
+            padding: 30px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .search-btn {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .search-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .search-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-chip {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .filter-chip:hover {
+            background: #e9ecef;
+        }
+        
+        .filter-chip.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .results-section {
+            padding: 30px;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .result-card {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .result-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .result-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        
+        .result-meta {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        
+        .category-badge {
+            padding: 4px 12px;
+            background: #e3f2fd;
+            color: #1976d2;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .similarity-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .similarity-high {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .similarity-medium {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .similarity-low {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+        
+        .result-snippet {
+            color: #495057;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        
+        .result-url {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .result-url:hover {
+            text-decoration: underline;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+        
+        .page-btn {
+            padding: 10px 15px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .page-btn:hover {
+            background: #f8f9fa;
+        }
+        
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 법률 블로그 검색</h1>
+            <p>채권추심, 지급명령, 압류 등 법률 정보를 빠르게 찾아보세요</p>
+        </div>
+        
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text" class="search-input" id="searchInput" 
+                       placeholder="검색어를 입력하세요 (예: 채권추심 방법, 지급명령 신청)" 
+                       onkeypress="handleKeyPress(event)">
+                <button class="search-btn" id="searchBtn" onclick="performSearch()">검색</button>
+            </div>
+            
+            <div class="filters">
+                <span style="font-weight: 600; color: #495057;">카테고리:</span>
+                <div class="filter-chip active" data-category="all" onclick="toggleFilter(this)">전체</div>
+                <div class="filter-chip" data-category="채권추심" onclick="toggleFilter(this)">채권추심</div>
+                <div class="filter-chip" data-category="생활과법률" onclick="toggleFilter(this)">생활과법률</div>
+                <div class="filter-chip" data-category="공사/물품/용역" onclick="toggleFilter(this)">공사/물품/용역</div>
+                <div class="filter-chip" data-category="대여금/미수금" onclick="toggleFilter(this)">대여금/미수금</div>
+            </div>
+        </div>
+        
+        <div class="results-section">
+            <div id="stats" class="stats" style="display: none;">
+                <div id="statsText"></div>
+                <div id="processingTime"></div>
+            </div>
+            
+            <div id="results"></div>
+            
+            <div id="pagination" class="pagination" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let currentQuery = '';
+        let currentFilters = [];
+        let currentPage = 0;
+        const pageSize = 10;
+        
+        // 엔터키 처리
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        }
+        
+        // 검색 실행
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) {
+                alert('검색어를 입력해주세요.');
+                return;
+            }
+            
+            currentQuery = query;
+            currentPage = 0;
+            
+            await searchWithFilters();
+        }
+        
+        // 필터 토글
+        function toggleFilter(element) {
+            const category = element.dataset.category;
+            
+            if (category === 'all') {
+                // 전체 선택 시 다른 필터들 비활성화
+                document.querySelectorAll('.filter-chip').forEach(chip => {
+                    chip.classList.remove('active');
+                });
+                element.classList.add('active');
+                currentFilters = [];
+            } else {
+                // 전체 필터 비활성화
+                document.querySelector('.filter-chip[data-category="all"]').classList.remove('active');
+                
+                // 현재 필터 토글
+                element.classList.toggle('active');
+                
+                // 활성화된 필터들 수집
+                currentFilters = Array.from(document.querySelectorAll('.filter-chip.active'))
+                    .map(chip => chip.dataset.category)
+                    .filter(cat => cat !== 'all');
+                
+                // 필터가 없으면 전체 활성화
+                if (currentFilters.length === 0) {
+                    document.querySelector('.filter-chip[data-category="all"]').classList.add('active');
+                }
+            }
+            
+            if (currentQuery) {
+                currentPage = 0;
+                searchWithFilters();
+            }
+        }
+        
+        // 필터와 함께 검색
+        async function searchWithFilters() {
+            const searchBtn = document.getElementById('searchBtn');
+            const resultsDiv = document.getElementById('results');
+            
+            searchBtn.disabled = true;
+            searchBtn.textContent = '검색 중...';
+            
+            resultsDiv.innerHTML = '<div class="loading">검색 중입니다...</div>';
+            
+            try {
+                const requestBody = {
+                    q: currentQuery,
+                    top_k: pageSize,
+                    offset: currentPage * pageSize,
+                    min_similarity: 0.0
+                };
+                
+                if (currentFilters.length > 0) {
+                    requestBody.filters = { category: currentFilters };
+                }
+                
+                const response = await fetch(`${API_BASE}/search`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayResults(data);
+                
+            } catch (error) {
+                console.error('Search error:', error);
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        검색 중 오류가 발생했습니다: ${error.message}
+                    </div>
+                `;
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = '검색';
+            }
+        }
+        
+        // 결과 표시
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const statsDiv = document.getElementById('stats');
+            const paginationDiv = document.getElementById('pagination');
+            
+            // 통계 표시
+            statsDiv.style.display = 'block';
+            document.getElementById('statsText').textContent = 
+                `"${data.query}" 검색 결과: ${data.total}개 (${data.results.length}개 표시)`;
+            document.getElementById('processingTime').textContent = 
+                `처리 시간: ${data.processing_time_ms}ms`;
+            
+            // 결과 표시
+            if (data.results.length === 0) {
+                resultsDiv.innerHTML = '<div class="loading">검색 결과가 없습니다.</div>';
+                paginationDiv.style.display = 'none';
+                return;
+            }
+            
+            let html = '';
+            data.results.forEach((result, index) => {
+                const similarityClass = result.score >= 0.8 ? 'similarity-high' : 
+                                      result.score >= 0.6 ? 'similarity-medium' : 'similarity-low';
+                
+                html += `
+                    <div class="result-card" onclick="window.open('${result.url}', '_blank')">
+                        <div class="result-header">
+                            <div>
+                                <div class="result-title">${result.title}</div>
+                                <div class="result-meta">
+                                    <span class="category-badge">${result.category}</span>
+                                    <span class="similarity-badge ${similarityClass}">
+                                        유사도: ${(result.score * 100).toFixed(1)}%
+                                    </span>
+                                    <span>${result.date}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="result-snippet">${result.snippet}</div>
+                        <a href="${result.url}" class="result-url" target="_blank">원문 보기 →</a>
+                    </div>
+                `;
+            });
+            
+            resultsDiv.innerHTML = html;
+            
+            // 페이지네이션 표시
+            if (data.total > pageSize) {
+                displayPagination(data.total);
+            } else {
+                paginationDiv.style.display = 'none';
+            }
+        }
+        
+        // 페이지네이션 표시
+        function displayPagination(total) {
+            const paginationDiv = document.getElementById('pagination');
+            const totalPages = Math.ceil(total / pageSize);
+            
+            let html = '';
+            
+            // 이전 페이지
+            html += `<button class="page-btn" ${currentPage === 0 ? 'disabled' : ''} 
+                     onclick="changePage(${currentPage - 1})">이전</button>`;
+            
+            // 페이지 번호들
+            const startPage = Math.max(0, currentPage - 2);
+            const endPage = Math.min(totalPages - 1, currentPage + 2);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" 
+                         onclick="changePage(${i})">${i + 1}</button>`;
+            }
+            
+            // 다음 페이지
+            html += `<button class="page-btn" ${currentPage >= totalPages - 1 ? 'disabled' : ''} 
+                     onclick="changePage(${currentPage + 1})">다음</button>`;
+            
+            paginationDiv.innerHTML = html;
+            paginationDiv.style.display = 'flex';
+        }
+        
+        // 페이지 변경
+        function changePage(page) {
+            currentPage = page;
+            searchWithFilters();
+        }
+        
+        // 초기 로드 시 카테고리 목록 가져오기
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_BASE}/categories`);
+                const data = await response.json();
+                
+                // 동적으로 카테고리 필터 생성 (필요시)
+                console.log('Available categories:', data.categories);
+            } catch (error) {
+                console.error('Failed to load categories:', error);
+            }
+        }
+        
+        // 페이지 로드 시 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCategories();
+        });
+    </script>
+</body>
+</html>
+
+
+
+

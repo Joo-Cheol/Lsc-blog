@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지능형 검색 - 법률 블로그 시스템</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .search-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 0;
+        }
+        .result-card {
+            transition: transform 0.2s ease;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .score-badge {
+            font-size: 0.8em;
+        }
+        .category-badge {
+            font-size: 0.75em;
+        }
+        .snippet {
+            line-height: 1.6;
+        }
+        .loading {
+            display: none;
+        }
+        .search-stats {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 네비게이션 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-gavel me-2"></i>법률 블로그 시스템
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/crawl">크롤링</a>
+                <a class="nav-link active" href="/search">검색</a>
+                <a class="nav-link" href="/generate">블로그 생성</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 검색 섹션 -->
+    <section class="search-container">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <h2 class="text-center mb-4">
+                        <i class="fas fa-search me-3"></i>지능형 법률 정보 검색
+                    </h2>
+                    <form id="searchForm">
+                        <div class="input-group input-group-lg">
+                            <input type="text" id="searchQuery" class="form-control" 
+                                   placeholder="검색어를 입력하세요 (예: 채권추심, 지급명령, 압류절차)" 
+                                   required>
+                            <button class="btn btn-light" type="submit">
+                                <i class="fas fa-search me-2"></i>검색
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <!-- 검색 옵션 -->
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="topK" class="form-label text-white">결과 개수</label>
+                            <select id="topK" class="form-select">
+                                <option value="5">5개</option>
+                                <option value="10" selected>10개</option>
+                                <option value="20">20개</option>
+                                <option value="50">50개</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="minSimilarity" class="form-label text-white">최소 유사도</label>
+                            <select id="minSimilarity" class="form-select">
+                                <option value="0.0">모든 결과</option>
+                                <option value="0.3">0.3 이상</option>
+                                <option value="0.5" selected>0.5 이상</option>
+                                <option value="0.7">0.7 이상</option>
+                                <option value="0.8">0.8 이상</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 검색 결과 -->
+    <section class="py-5">
+        <div class="container">
+            <!-- 로딩 -->
+            <div id="loading" class="loading text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">검색 중...</span>
+                </div>
+                <p class="mt-2">검색 중입니다...</p>
+            </div>
+
+            <!-- 검색 통계 -->
+            <div id="searchStats" class="search-stats mb-4" style="display: none;">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <h6 class="text-muted">검색어</h6>
+                        <span id="searchQueryDisplay" class="fw-bold">-</span>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted">결과 수</h6>
+                        <span id="resultCount" class="fw-bold text-primary">-</span>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted">검색 시간</h6>
+                        <span id="searchTime" class="fw-bold text-success">-</span>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted">최고 점수</h6>
+                        <span id="maxScore" class="fw-bold text-warning">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 결과 목록 -->
+            <div id="searchResults"></div>
+
+            <!-- 빈 상태 -->
+            <div id="emptyState" class="text-center py-5">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">검색어를 입력해주세요</h4>
+                <p class="text-muted">법률 관련 키워드로 검색해보세요.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 푸터 -->
+    <footer class="bg-dark text-white py-4">
+        <div class="container text-center">
+            <p>&copy; 2025 법률 블로그 검색 & 생성 시스템. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 검색 폼 제출
+        document.getElementById('searchForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const query = document.getElementById('searchQuery').value.trim();
+            if (!query) return;
+            
+            await performSearch(query);
+        });
+
+        // 검색 실행
+        async function performSearch(query) {
+            const startTime = Date.now();
+            
+            // UI 업데이트
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('searchResults').innerHTML = '';
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('searchStats').style.display = 'none';
+            
+            try {
+                const formData = new FormData();
+                formData.append('query', query);
+                formData.append('top_k', document.getElementById('topK').value);
+                formData.append('min_similarity', document.getElementById('minSimilarity').value);
+                
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                const searchTime = Date.now() - startTime;
+                
+                if (result.success) {
+                    displayResults(result, searchTime);
+                } else {
+                    displayError(result.error);
+                }
+            } catch (error) {
+                displayError('검색 중 오류가 발생했습니다: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // 결과 표시
+        function displayResults(result, searchTime) {
+            const resultsContainer = document.getElementById('searchResults');
+            const statsContainer = document.getElementById('searchStats');
+            
+            if (result.results.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-warning text-center">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        검색 결과가 없습니다. 다른 키워드로 시도해보세요.
+                    </div>
+                `;
+                return;
+            }
+            
+            // 통계 업데이트
+            document.getElementById('searchQueryDisplay').textContent = result.query;
+            document.getElementById('resultCount').textContent = result.total;
+            document.getElementById('searchTime').textContent = searchTime + 'ms';
+            document.getElementById('maxScore').textContent = result.results[0].score.toFixed(3);
+            statsContainer.style.display = 'block';
+            
+            // 결과 카드 생성
+            let resultsHTML = '';
+            result.results.forEach((item, index) => {
+                const scoreColor = getScoreColor(item.score);
+                const categoryColor = getCategoryColor(item.category);
+                
+                resultsHTML += `
+                    <div class="card result-card mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="card-title mb-0">
+                                    <a href="${item.url}" target="_blank" class="text-decoration-none">
+                                        ${item.title}
+                                    </a>
+                                </h5>
+                                <div>
+                                    <span class="badge ${scoreColor} score-badge me-2">
+                                        ${item.score.toFixed(3)}
+                                    </span>
+                                    <span class="badge ${categoryColor} category-badge">
+                                        ${item.category}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <p class="card-text snippet text-muted">
+                                ${item.snippet}
+                            </p>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>${item.date}
+                                    <i class="fas fa-link ms-3 me-1"></i>
+                                    <a href="${item.url}" target="_blank" class="text-decoration-none">
+                                        원문 보기
+                                    </a>
+                                </small>
+                                <button class="btn btn-outline-primary btn-sm" 
+                                        onclick="showFullText('${item.id}')">
+                                    <i class="fas fa-expand me-1"></i>전체 텍스트
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsContainer.innerHTML = resultsHTML;
+        }
+
+        // 오류 표시
+        function displayError(error) {
+            document.getElementById('searchResults').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    ${error}
+                </div>
+            `;
+        }
+
+        // 점수에 따른 색상
+        function getScoreColor(score) {
+            if (score >= 0.8) return 'bg-success';
+            if (score >= 0.6) return 'bg-primary';
+            if (score >= 0.4) return 'bg-warning';
+            return 'bg-secondary';
+        }
+
+        // 카테고리에 따른 색상
+        function getCategoryColor(category) {
+            const colors = {
+                '채권추심': 'bg-primary',
+                '지급명령': 'bg-success',
+                '압류절차': 'bg-warning',
+                '제3채무자': 'bg-info',
+                '강제집행': 'bg-danger',
+                '기타': 'bg-secondary'
+            };
+            return colors[category] || 'bg-secondary';
+        }
+
+        // 전체 텍스트 표시
+        function showFullText(id) {
+            // 모달이나 별도 페이지로 전체 텍스트 표시
+            alert('전체 텍스트 기능은 추후 구현 예정입니다.');
+        }
+
+        // 엔터키 검색
+        document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('searchForm').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+

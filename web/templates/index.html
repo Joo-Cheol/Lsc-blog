@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 법률 블로그 생성기</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .main-container { background: rgba(255,255,255,0.95); border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+        .card { border: none; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .btn-primary { background: linear-gradient(45deg, #667eea, #764ba2); border: none; border-radius: 25px; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .form-control { border-radius: 10px; border: 2px solid #e9ecef; }
+        .form-control:focus { border-color: #667eea; box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25); }
+        .alert { border-radius: 15px; border: none; }
+        .spinner-border { color: #667eea; }
+        .result-content { background: #f8f9fa; border-radius: 10px; padding: 20px; margin-top: 15px; }
+        .hashtag { background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 15px; font-size: 0.9em; margin: 2px; display: inline-block; }
+        .quality-score { font-size: 1.2em; font-weight: bold; }
+        .quality-excellent { color: #28a745; }
+        .quality-good { color: #ffc107; }
+        .quality-poor { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="main-container p-5">
+                    <div class="text-center mb-5">
+                        <h1 class="display-4 fw-bold text-primary mb-3">
+                            <i class="fas fa-robot me-3"></i>AI 법률 블로그 생성기
+                        </h1>
+                        <p class="lead text-muted">전문적인 법률 콘텐츠를 AI가 자동으로 생성합니다</p>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0"><i class="fas fa-edit me-2"></i>블로그 생성</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="generateForm">
+                                        <div class="mb-3">
+                                            <label for="topic" class="form-label">주제</label>
+                                            <input type="text" class="form-control" id="topic" name="topic" 
+                                                   placeholder="예: 채권추심 절차" required>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="category" class="form-label">카테고리</label>
+                                            <select class="form-control" id="category" name="category">
+                                                <option value="채권추심">채권추심</option>
+                                                <option value="소송">소송</option>
+                                                <option value="계약">계약</option>
+                                                <option value="가족법">가족법</option>
+                                                <option value="기타">기타</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="style" class="form-label">스타일</label>
+                                            <select class="form-control" id="style" name="style">
+                                                <option value="professional">전문적</option>
+                                                <option value="friendly">친근한</option>
+                                                <option value="formal">격식있는</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <button type="submit" class="btn btn-primary btn-lg w-100" id="generateBtn">
+                                            <i class="fas fa-magic me-2"></i>블로그 생성
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-success text-white">
+                                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>결과</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="loading" class="text-center d-none">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">생성 중...</span>
+                                        </div>
+                                        <p class="mt-3">AI가 블로그를 생성하고 있습니다...</p>
+                                    </div>
+                                    
+                                    <div id="result" class="d-none">
+                                        <div class="mb-3">
+                                            <h6>제목</h6>
+                                            <div id="title" class="fw-bold text-primary"></div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <h6>품질 점수</h6>
+                                            <div id="qualityScore" class="quality-score"></div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <h6>생성 시간</h6>
+                                            <div id="generationTime"></div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <h6>콘텐츠</h6>
+                                            <div id="content" class="result-content"></div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <h6>해시태그</h6>
+                                            <div id="hashtags"></div>
+                                        </div>
+                                        
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-outline-primary" id="copyBtn">
+                                                <i class="fas fa-copy me-2"></i>복사
+                                            </button>
+                                            <button class="btn btn-outline-success" id="downloadBtn">
+                                                <i class="fas fa-download me-2"></i>다운로드
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="error" class="alert alert-danger d-none">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <span id="errorMessage"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('generateForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            data.mode = 'unified';
+            
+            // UI 상태 변경
+            document.getElementById('loading').classList.remove('d-none');
+            document.getElementById('result').classList.add('d-none');
+            document.getElementById('error').classList.add('d-none');
+            document.getElementById('generateBtn').disabled = true;
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 결과 표시
+                    document.getElementById('title').textContent = result.title;
+                    document.getElementById('content').innerHTML = result.content;
+                    document.getElementById('generationTime').textContent = result.generation_time + '초';
+                    
+                    // 품질 점수 표시
+                    const qualityScore = result.quality_score || 0;
+                    const qualityElement = document.getElementById('qualityScore');
+                    qualityElement.textContent = (qualityScore * 100).toFixed(1) + '%';
+                    
+                    if (qualityScore >= 0.8) {
+                        qualityElement.className = 'quality-score quality-excellent';
+                    } else if (qualityScore >= 0.6) {
+                        qualityElement.className = 'quality-score quality-good';
+                    } else {
+                        qualityElement.className = 'quality-score quality-poor';
+                    }
+                    
+                    // 해시태그 표시
+                    const hashtagsElement = document.getElementById('hashtags');
+                    if (result.hashtags && result.hashtags.length > 0) {
+                        hashtagsElement.innerHTML = result.hashtags.map(tag => 
+                            `<span class="hashtag">${tag}</span>`
+                        ).join('');
+                    } else {
+                        hashtagsElement.innerHTML = '<span class="text-muted">해시태그 없음</span>';
+                    }
+                    
+                    document.getElementById('result').classList.remove('d-none');
+                } else {
+                    throw new Error(result.error || '알 수 없는 오류가 발생했습니다.');
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('error').classList.remove('d-none');
+            } finally {
+                document.getElementById('loading').classList.add('d-none');
+                document.getElementById('generateBtn').disabled = false;
+            }
+        });
+        
+        // 복사 기능
+        document.getElementById('copyBtn').addEventListener('click', function() {
+            const content = document.getElementById('content').innerHTML;
+            navigator.clipboard.writeText(content).then(() => {
+                alert('콘텐츠가 클립보드에 복사되었습니다.');
+            });
+        });
+        
+        // 다운로드 기능
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            const title = document.getElementById('title').textContent;
+            const content = document.getElementById('content').innerHTML;
+            
+            const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>${title}</title>
+</head>
+<body>
+    ${content}
+</body>
+</html>`;
+            
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = title + '.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>
+

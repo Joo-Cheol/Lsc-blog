@@ -1,0 +1,67 @@
+# Python / FastAPI
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.python-version
+.venv/
+venv/
+
+# Node / Next.js
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# RAG 산출물 / 인덱스 / 모델
+artifacts/
+embedding_output/
+**/chroma/
+**/indexes/
+*.npy
+*.npz
+*.bin
+*.pt
+*.onnx
+*.sqlite
+*.parquet
+
+# Logs / dumps
+logs/
+*.log
+dump.*
+coverage/
+.DS_Store
+
+# Env (예시는 커밋 허용)
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# IDE
+.vscode/
+.idea/
+
+# 기존 데이터/아카이브
+archive/
+LSC_Core_Files/
+LSC_Core_Files.zip
+selenium/drivers/
+src/data/
+quality_monitoring/
+
+# 임시/테스트 파일
+temp/
+tmp/
+*.tmp
+*.temp
+
+
+
+

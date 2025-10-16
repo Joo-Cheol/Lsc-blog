@@ -1,0 +1,10 @@
+{
+  "cat": "string (예: 채권추심)",
+  "date": "YYYY-MM-DD",
+  "title": "string",
+  "url": "string (마스킹 가능)",
+  "author": "string (마스킹)",
+  "post_type": "string (blog)",
+  "content": "string (요약/발췌/변형문, PII 제거)"
+}
+
