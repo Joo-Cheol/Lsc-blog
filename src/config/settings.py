@@ -13,7 +13,7 @@ load_dotenv()
 class Settings(BaseModel):
     """애플리케이션 설정"""
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     BRAND_TONE: str = os.getenv(
         "BRAND_TONE", "법무법인 혜안 톤, 채권자 관점, 합법·절차 중심, 한국어"
     )

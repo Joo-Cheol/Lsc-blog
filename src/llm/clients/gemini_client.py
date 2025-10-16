@@ -41,7 +41,32 @@ class GeminiClient:
                         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
                     ],
                 )
-                return (getattr(resp, "text", None) or "").strip()
+                # 응답 텍스트 추출 (안전한 방식)
+                try:
+                    # 먼저 candidates를 통해 접근
+                    if resp.candidates and len(resp.candidates) > 0:
+                        candidate = resp.candidates[0]
+                        if candidate.content and candidate.content.parts:
+                            text_parts = []
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'text') and part.text:
+                                    text_parts.append(part.text)
+                            if text_parts:
+                                return ''.join(text_parts).strip()
+                    
+                    # 대안: parts 직접 접근
+                    if hasattr(resp, 'parts') and resp.parts:
+                        text_parts = []
+                        for part in resp.parts:
+                            if hasattr(part, 'text') and part.text:
+                                text_parts.append(part.text)
+                        if text_parts:
+                            return ''.join(text_parts).strip()
+                    
+                    return ""
+                except Exception as e:
+                    print(f"응답 파싱 오류: {e}")
+                    return ""
                 
             except GoogleAPIError as e:
                 if attempt < max_retries:
