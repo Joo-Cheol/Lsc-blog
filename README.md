@@ -1,4 +1,4 @@
-# 법무법인 혜안 채권추심 블로그 자동화 시스템
+# LSC Blog Generator - 법무법인 혜안 채권추심 블로그 자동화 시스템
 
 RAG(Retrieval-Augmented Generation) 기반의 채권추심 전문 블로그 글 자동 생성 시스템입니다. 네이버 블로그에서 관련 데이터를 수집하고, ChromaDB를 활용한 벡터 검색과 Gemini API를 통한 고품질 콘텐츠 생성을 제공합니다.
 
@@ -8,10 +8,12 @@ RAG(Retrieval-Augmented Generation) 기반의 채권추심 전문 블로그 글 
 - **벡터 기반 검색**: ChromaDB를 활용한 의미적 문서 검색
 - **RAG 기반 글 생성**: Gemini API를 통한 전문적이고 SEO 최적화된 블로그 글 생성
 - **대화형 인터페이스**: 사용자 친화적인 명령어 기반 시스템
+- **Next.js 웹 인터페이스**: 현대적인 웹 UI 제공
 
 ## 📋 시스템 요구사항
 
 - Python 3.8 이상
+- Node.js 18 이상
 - Chrome 브라우저 (Selenium WebDriver용)
 - Gemini API 키
 
@@ -19,8 +21,8 @@ RAG(Retrieval-Augmented Generation) 기반의 채권추심 전문 블로그 글 
 
 ### 1. 저장소 클론
 ```bash
-git clone <repository-url>
-cd blog-automation-system
+git clone https://github.com/Joo-Cheol/Lsc-blog.git
+cd Lsc-blog
 ```
 
 ### 2. 가상환경 생성 및 활성화
@@ -31,7 +33,11 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 
 ### 3. 의존성 설치
 ```bash
-pip install -r requirements.txt
+# Python 의존성
+pip install -r config/requirements.txt
+
+# Node.js 의존성
+npm install
 ```
 
 ### 4. Chrome WebDriver 설치
@@ -48,63 +54,60 @@ sudo apt-get install chromium-chromedriver
 
 ### 5. 환경변수 설정
 ```bash
-# Gemini API 키 설정 (Windows)
-set GEMINI_API_KEY=AIzaSyCBboszWE6B_llcWYKtEXQJtMIET8tuDR8
+# .env 파일 생성
+cp .env.example .env
 
-# 또는 config.py에서 직접 설정 (이미 설정됨)
+# Gemini API 키 설정
+GEMINI_API_KEY=your_api_key_here
 ```
 
 ### 6. 시스템 테스트
 ```bash
 # 전체 시스템 테스트
-python test_system.py
-
-# Git 저장소 설정 (선택사항)
-python setup_git.py
+python test_api.py
+python test_generate.py
 ```
 
 ## 🎯 사용 방법
 
-### 대화형 모드 (권장)
+### 웹 인터페이스 (권장)
 ```bash
-python main.py --interactive
+# 프론트엔드 시작
+npm run dev
+
+# 백엔드 시작 (별도 터미널)
+python api/main.py
 ```
 
 ### 명령어 옵션
 ```bash
 # 데이터 크롤링만 실행
-python main.py --crawl
+python src/crawler.py
 
 # 특정 질문으로 블로그 글 생성
-python main.py --generate "채권추심의 기본 원칙"
+python src/generator/guide_based_generator.py
 
 # 헤드리스 모드로 실행
-python main.py --headless --interactive
+python src/crawler.py --headless
 ```
-
-### 대화형 모드 명령어
-- `crawl`: 네이버 블로그에서 데이터 크롤링 및 저장
-- `generate [질문]`: 질문에 대한 블로그 글 생성
-- `stats`: 데이터베이스 통계 확인
-- `clear`: 데이터베이스 초기화
-- `quit`: 프로그램 종료
 
 ## 📁 프로젝트 구조
 
 ```
-blog-automation-system/
-├── main.py              # 메인 실행 파일
-├── crawler.py           # 네이버 블로그 크롤링 모듈
-├── vectorizer.py        # ChromaDB 벡터화 모듈
-├── rag_llm.py          # RAG 기반 글 생성 모듈
-├── config.py           # 시스템 설정 관리
-├── test_system.py      # 시스템 테스트 스크립트
-├── setup_git.py        # Git 저장소 설정 스크립트
-├── requirements.txt     # 패키지 의존성
-├── README.md           # 프로젝트 설명서
-├── chromedriver.exe     # Chrome WebDriver (Windows)
-├── rag_db/             # ChromaDB 데이터베이스 (자동 생성)
-└── blog_automation.log # 시스템 로그
+Lsc-blog/
+├── app/                    # Next.js 프론트엔드
+├── api/                    # FastAPI 백엔드
+├── src/                    # 핵심 Python 모듈
+│   ├── crawler.py         # 네이버 블로그 크롤링
+│   ├── generator/         # 블로그 글 생성 모듈
+│   ├── search/            # 벡터 검색 모듈
+│   ├── llm/               # LLM 서비스
+│   └── data/              # 데이터 저장소
+├── components/             # React 컴포넌트
+├── lib/                    # 유틸리티 함수
+├── scripts/                # 배포 및 실행 스크립트
+├── docs/                   # 문서
+└── monitoring/             # 모니터링 도구
 ```
 
 ## 🔧 모듈별 상세 설명
@@ -114,19 +117,15 @@ blog-automation-system/
 - **기술**: Selenium WebDriver를 활용한 동적 콘텐츠 처리
 - **대상**: '채권추심', '미수금 회수', '떼인 돈 받는 법' 등 키워드 검색 결과
 
-### vectorizer.py
-- **기능**: 수집된 텍스트를 벡터화하여 ChromaDB에 저장
-- **기술**: sentence-transformers를 활용한 다국어 임베딩
-- **특징**: 텍스트 청킹, 전처리, 의미적 검색 지원
-
-### rag_llm.py
+### generator/
 - **기능**: RAG 기반으로 전문적인 블로그 글 생성
 - **기술**: Gemini API를 활용한 대화형 AI
 - **특징**: 법무법인 혜안의 전문성을 반영한 고품질 콘텐츠 생성
 
-### main.py
-- **기능**: 모든 모듈을 통합한 완전한 워크플로우
-- **특징**: 대화형 인터페이스, 명령어 기반 실행, 에러 처리
+### search/
+- **기능**: 수집된 텍스트를 벡터화하여 ChromaDB에 저장
+- **기술**: sentence-transformers를 활용한 다국어 임베딩
+- **특징**: 텍스트 청킹, 전처리, 의미적 검색 지원
 
 ## 📊 시스템 워크플로우
 
@@ -182,8 +181,8 @@ pip install --upgrade selenium
 ### ChromaDB 오류
 ```bash
 # 데이터베이스 초기화
-rm -rf rag_db/
-python main.py --crawl
+rm -rf src/data/indexes/
+python src/crawler.py
 ```
 
 ### API 키 오류
@@ -197,9 +196,9 @@ cat .env
 
 ## 📈 성능 최적화
 
-- **청크 크기 조정**: `vectorizer.py`의 `chunk_size` 파라미터 조정
+- **청크 크기 조정**: `src/search/embedding.py`의 `chunk_size` 파라미터 조정
 - **검색 결과 수**: `n_references` 파라미터로 참조 문서 수 조정
-- **크롤링 간격**: `crawler.py`의 `time.sleep()` 값 조정
+- **크롤링 간격**: `src/crawler.py`의 `time.sleep()` 값 조정
 
 ## 🤝 기여하기
 
