@@ -227,6 +227,7 @@ class NaverBlogCrawler:
             
                 stats['total_found'] += len(posts)
                 stats['pages_processed'] = page
+                logger.info(f"[{run_id}] 페이지 {page} 통계 업데이트 - posts: {len(posts)}, total_found: {stats['total_found']}, pages_processed: {stats['pages_processed']}")
                 
                 # 페이지 완료 이벤트
                 if on_event:
@@ -310,12 +311,16 @@ class NaverBlogCrawler:
                     self._random_delay()
             
             # 카테고리별 통계 누적
+            logger.info(f"[{run_id}] 카테고리 {category_no} 통계 누적 전 - total_stats: {total_stats}")
+            logger.info(f"[{run_id}] 카테고리 {category_no} 통계 누적 전 - stats: {stats}")
+            
             for key in total_stats:
                 if key == 'collected_posts':
                     total_stats[key].extend(stats[key])
                 else:
                     total_stats[key] += stats[key]
             
+            logger.info(f"[{run_id}] 카테고리 {category_no} 통계 누적 후 - total_stats: {total_stats}")
             logger.info(f"[{run_id}] 카테고리 {category_no} 완료 - {stats}")
         
         # 마지막 logno 갱신 (set_last_logno → update_checkpoint)
