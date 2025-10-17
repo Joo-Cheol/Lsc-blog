@@ -30,10 +30,22 @@ export default function RootLayout({
                 </div>
                 <nav className="flex space-x-8">
                   <a href="/" className="text-gray-600 hover:text-gray-900">
+                    홈
+                  </a>
+                  <a href="/wizard" className="text-blue-600 hover:text-blue-700 font-medium">
+                    마법사
+                  </a>
+                  <a href="/crawl" className="text-gray-600 hover:text-gray-900">
+                    크롤링
+                  </a>
+                  <a href="/search" className="text-gray-600 hover:text-gray-900">
                     검색
                   </a>
                   <a href="/generate" className="text-gray-600 hover:text-gray-900">
                     생성
+                  </a>
+                  <a href="/dashboard" className="text-gray-600 hover:text-gray-900">
+                    대시보드
                   </a>
                   <a href="/ops" className="text-gray-600 hover:text-gray-900">
                     운영

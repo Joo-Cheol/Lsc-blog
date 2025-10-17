@@ -52,6 +52,7 @@ class CrawlResponse(BaseModel):
     duration_ms: int = Field(..., description="실행 시간 (밀리초)")
     message: Optional[str] = Field(None, description="추가 메시지")
     blog_id: Optional[str] = Field(None, description="블로그 ID")
+    collected_posts: Optional[List[Dict[str, Any]]] = Field(None, description="수집된 글 목록")
 
 
 class IndexRequest(BaseModel):

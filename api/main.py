@@ -128,11 +128,14 @@ async def general_exception_handler(request, exc: Exception):
 
 
 # 라우터 등록
+from api.routes import pipeline
+
 app.include_router(crawl.router, prefix="/api/v1", tags=["crawl"])
 app.include_router(index.router, prefix="/api/v1", tags=["index"])
 app.include_router(search.router, prefix="/api/v1", tags=["search"])
 app.include_router(generate.router, prefix="/api/v1", tags=["generate"])
 app.include_router(upload.router, prefix="/api/v1", tags=["upload"])
+app.include_router(pipeline.router, prefix="/api/v1", tags=["pipeline"])
 
 
 # 기본 엔드포인트

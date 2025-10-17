@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Play, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, Play, CheckCircle, XCircle, ArrowRight, Database } from "lucide-react";
 
 interface CrawlResult {
   success: boolean;
@@ -18,6 +19,12 @@ interface CrawlResult {
   duration_ms: number;
   message?: string;
   blog_id?: string;
+  collected_posts?: Array<{
+    title: string;
+    url: string;
+    logno: string;
+    status: 'new' | 'duplicate' | 'updated';
+  }>;
 }
 
 export default function CrawlForm() {
@@ -25,6 +32,7 @@ export default function CrawlForm() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CrawlResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string>("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +51,7 @@ export default function CrawlForm() {
         return;
       }
 
+      setProgress("카테고리 탐색 중...");
       const response = await fetch("/api/crawl", {
         method: "POST",
         headers: {
@@ -99,7 +108,7 @@ export default function CrawlForm() {
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                크롤링 중...
+                {progress || "크롤링 중..."}
               </>
             ) : (
               <>
@@ -108,6 +117,12 @@ export default function CrawlForm() {
               </>
             )}
           </Button>
+          
+          {progress && (
+            <p className="text-sm text-blue-600 text-center mt-2">
+              {progress}
+            </p>
+          )}
         </form>
 
         {error && (
@@ -121,14 +136,84 @@ export default function CrawlForm() {
           <Alert className="mt-4">
             <CheckCircle className="h-4 w-4" />
             <AlertDescription>
-              <div className="space-y-1">
-                <p><strong>크롤링 완료!</strong></p>
-                <p>블로그 ID: {result.blog_id}</p>
-                <p>수집: {result.crawled_count}개</p>
-                <p>스킵: {result.skipped_count}개</p>
-                <p>실패: {result.failed_count}개</p>
-                <p>소요시간: {result.duration_ms}ms</p>
-                {result.message && <p>{result.message}</p>}
+              <div className="space-y-3">
+                <div>
+                  <p className="font-semibold text-green-800">크롤링 완료!</p>
+                  <p className="text-sm text-gray-600">블로그 ID: {result.blog_id}</p>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="text-center">
+                    <p className="font-semibold text-blue-600">{result.crawled_count}</p>
+                    <p className="text-gray-600">수집</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-semibold text-yellow-600">{result.skipped_count}</p>
+                    <p className="text-gray-600">스킵</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-semibold text-red-600">{result.failed_count}</p>
+                    <p className="text-gray-600">실패</p>
+                  </div>
+                </div>
+                
+                    <p className="text-sm text-gray-500">소요시간: {(result.duration_ms / 1000).toFixed(1)}초</p>
+                    
+                    {/* 수집된 글 목록 표시 */}
+                    {result.collected_posts && result.collected_posts.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">수집된 글 목록:</h4>
+                        <div className="max-h-40 overflow-y-auto space-y-1">
+                          {result.collected_posts.map((post, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 truncate" title={post.title}>
+                                  {post.title}
+                                </p>
+                                <p className="text-gray-500">#{post.logno}</p>
+                              </div>
+                              <div className="ml-2">
+                                {post.status === 'new' && (
+                                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                                    새글
+                                  </span>
+                                )}
+                                {post.status === 'updated' && (
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                                    업데이트
+                                  </span>
+                                )}
+                                {post.status === 'duplicate' && (
+                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
+                                    중복
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2 pt-2">
+                      <Link href="/ops">
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                          <Database className="mr-1 h-3 w-3" />
+                          인덱싱 시작하기
+                        </Button>
+                      </Link>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          setResult(null);
+                          setError(null);
+                          setProgress("");
+                        }}
+                      >
+                        같은 주소로 다시 크롤
+                      </Button>
+                    </div>
               </div>
             </AlertDescription>
           </Alert>

@@ -9,10 +9,35 @@ import {
   BarChart3, 
   Settings,
   ArrowRight,
-  Zap
+  Zap,
+  Play,
+  CheckCircle,
+  AlertCircle,
+  XCircle
 } from 'lucide-react';
 
 export default function HomePage() {
+  // 시스템 상태 배지 컴포넌트
+  const StatusBadge = ({ status, label }: { status: 'healthy' | 'degraded' | 'unhealthy', label: string }) => {
+    const colors = {
+      healthy: 'bg-green-100 text-green-800 border-green-200',
+      degraded: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      unhealthy: 'bg-red-100 text-red-800 border-red-200'
+    }
+    const icons = {
+      healthy: <CheckCircle className="h-3 w-3" />,
+      degraded: <AlertCircle className="h-3 w-3" />,
+      unhealthy: <XCircle className="h-3 w-3" />
+    }
+    
+    return (
+      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs border ${colors[status]}`}>
+        {icons[status]}
+        {label}
+      </div>
+    )
+  }
+
   const features = [
     {
       icon: <Download className="h-6 w-6" />,
@@ -62,9 +87,49 @@ export default function HomePage() {
               LSC Blog Automation
             </h1>
           </div>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            AI 기반 네이버 블로그 자동화 시스템으로 법률 콘텐츠를 효율적으로 관리하세요
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-6">
+            <strong>블로그 주소만 붙여넣으면 새 글을 자동으로 수집해 검색·요약해 드려요</strong>
           </p>
+          <p className="text-lg text-gray-500 max-w-3xl mx-auto mb-8">
+            카테고리/페이지 지정 불필요 · 새 글만 자동 수집 · 검색 준비까지 원클릭
+          </p>
+          
+          {/* 시스템 상태 배지 */}
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <StatusBadge status="healthy" label="API" />
+            <StatusBadge status="healthy" label="데이터베이스" />
+            <StatusBadge status="healthy" label="AI엔진" />
+          </div>
+          
+          {/* 원클릭 입력 */}
+          <div className="max-w-md mx-auto mb-8">
+            <div className="flex gap-2">
+              <input
+                type="url"
+                placeholder="https://blog.naver.com/블로그ID"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <Link href="/wizard">
+                <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3">
+                  <Play className="mr-2 h-5 w-5" />
+                  원클릭 시작
+                </Button>
+              </Link>
+            </div>
+            <p className="text-sm text-gray-500 mt-2 text-center">
+              카테고리/페이지는 자동 감지돼요
+            </p>
+          </div>
+          
+          {/* 대안 CTA */}
+          <div className="flex items-center justify-center gap-4">
+            <Link href="/search">
+              <Button size="lg" variant="outline" className="px-8 py-3">
+                <Search className="mr-2 h-5 w-5" />
+                바로 검색 체험
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* 통계 */}

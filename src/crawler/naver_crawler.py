@@ -162,7 +162,8 @@ class NaverBlogCrawler:
             'new_posts': 0,
             'duplicate_content': 0,
             'failed': 0,
-            'pages_processed': 0
+            'pages_processed': 0,
+            'collected_posts': []  # 수집된 글 목록 추가
         }
         
         # 각 카테고리별로 크롤링
@@ -174,7 +175,8 @@ class NaverBlogCrawler:
                 'new_posts': 0,
                 'duplicate_content': 0,
                 'failed': 0,
-                'pages_processed': 0
+                'pages_processed': 0,
+                'collected_posts': []  # 수집된 글 목록 추가
             }
             
             last_logno = self.storage.get_last_logno()
@@ -223,13 +225,31 @@ class NaverBlogCrawler:
                 
                 if status == "new":
                     stats['new_posts'] += 1
+                    stats['collected_posts'].append({
+                        'title': post['title'],
+                        'url': post['url'],
+                        'logno': post['logno'],
+                        'status': 'new'
+                    })
                     logger.info(f"[{run_id}] 새 포스트 추가: {post['title'][:50]}...")
                 elif status == "unchanged":
                     stats['duplicate_content'] += 1
+                    stats['collected_posts'].append({
+                        'title': post['title'],
+                        'url': post['url'],
+                        'logno': post['logno'],
+                        'status': 'duplicate'
+                    })
                     logger.info(f"[{run_id}] 중복 내용 스킵: {post['title'][:50]}...")
                 else:
                     # updated
                     stats['new_posts'] += 1
+                    stats['collected_posts'].append({
+                        'title': post['title'],
+                        'url': post['url'],
+                        'logno': post['logno'],
+                        'status': 'updated'
+                    })
                     logger.info(f"[{run_id}] 포스트 업데이트: {post['title'][:50]}...")
             
                 # 페이지 간 딜레이
@@ -238,7 +258,10 @@ class NaverBlogCrawler:
             
             # 카테고리별 통계 누적
             for key in total_stats:
-                total_stats[key] += stats[key]
+                if key == 'collected_posts':
+                    total_stats[key].extend(stats[key])
+                else:
+                    total_stats[key] += stats[key]
             
             logger.info(f"[{run_id}] 카테고리 {category_no} 완료 - {stats}")
         

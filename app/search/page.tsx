@@ -17,6 +17,11 @@ export default function SearchPage() {
           <p className="text-lg text-gray-600">
             RAG 기반 검색으로 관련 법률 문서를 정확하게 찾아보세요
           </p>
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <div className="text-sm text-gray-500">
+              예시: "채권추심 절차", "채권압류 방법", "합의서 작성 요령"
+            </div>
+          </div>
         </div>
 
         {/* 정보 카드 */}
@@ -85,7 +90,38 @@ export default function SearchPage() {
         </div>
 
         {/* 검색 폼 */}
-        <SearchForm />
+        <div className="space-y-6">
+          <SearchForm />
+          
+          {/* 빈 상태 가이드 */}
+          <Card className="bg-blue-50 border-blue-200">
+            <CardContent className="pt-6">
+              <div className="text-center space-y-3">
+                <div className="text-blue-600">
+                  <Search className="h-12 w-12 mx-auto" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-900">아직 데이터가 없어요</h3>
+                  <p className="text-blue-700">
+                    먼저 <a href="/wizard" className="underline font-medium">마법사</a>에서 주소를 입력해 수집을 시작해보세요.
+                  </p>
+                </div>
+                <div className="flex justify-center gap-2">
+                  <a href="/wizard">
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                      마법사 시작하기
+                    </Button>
+                  </a>
+                  <a href="/crawl">
+                    <Button size="sm" variant="outline">
+                      직접 크롤링
+                    </Button>
+                  </a>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

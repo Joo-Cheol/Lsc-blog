@@ -96,7 +96,8 @@ async def crawl_blog(request: CrawlRequest):
             last_logno_updated=results.get("last_logno_updated"),
             duration_ms=duration_ms,
             message=f"크롤링이 성공적으로 완료되었습니다. {crawled}개 포스트를 수집했습니다.",
-            blog_id=blog_id
+            blog_id=blog_id,
+            collected_posts=results.get("collected_posts", [])
         )
         
     except Exception as e:

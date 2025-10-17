@@ -17,6 +17,11 @@ export default function GeneratePage() {
           <p className="text-lg text-gray-600">
             혜안 톤앤매너로 전문적인 법률 블로그 포스트를 자동 생성합니다
           </p>
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <div className="text-sm text-gray-500">
+              품질 가드: 길이/소제목/체크리스트/디스클레이머 자동 검증
+            </div>
+          </div>
         </div>
 
         {/* 정보 카드 */}
