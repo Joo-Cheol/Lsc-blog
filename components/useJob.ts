@@ -29,6 +29,8 @@ export function useJob(jobId?: string) {
   const [lastEventId, setLastEventId] = useState<number>(0);
   const [isConnected, setIsConnected] = useState(false);
 
+  console.log("useJob 호출됨:", { jobId, job: job?.status, eventsCount: events.length });
+
   useEffect(() => {
     if (!jobId) return;
     let es: EventSource | undefined;
