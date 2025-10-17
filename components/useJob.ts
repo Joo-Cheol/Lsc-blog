@@ -37,16 +37,25 @@ export function useJob(jobId?: string) {
     let reconnectTimeout: NodeJS.Timeout;
 
     const connect = (since: number = 0) => {
-      const url = since > 0 ? `/api/jobs/${jobId}/events?since=${since}` : `/api/jobs/${jobId}/events`;
+      // Next.js 프록시 대신 직접 백엔드에 연결
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const url = since > 0 
+        ? `${baseUrl}/api/v1/jobs/${jobId}/events?since=${since}` 
+        : `${baseUrl}/api/v1/jobs/${jobId}/events`;
       
+      console.log("SSE 연결 시도:", url);
       es = new EventSource(url);
       setIsConnected(true);
 
       // 1) 즉시 스냅샷 (첫 연결시만)
       if (since === 0) {
-        fetch(`/api/jobs/${jobId}`)
+        fetch(`${baseUrl}/api/v1/jobs/${jobId}`)
           .then((r) => r.json())
-          .then((d) => d.ok && setJob(d.job));
+          .then((d) => {
+            console.log("Job 스냅샷:", d);
+            if (d.ok) setJob(d.job);
+          })
+          .catch((e) => console.error("Job 스냅샷 오류:", e));
       }
 
       es.addEventListener("snapshot", (e: any) => {
