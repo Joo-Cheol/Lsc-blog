@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 import time
 
-from .reranker import reranker
+from ..vector.reranker import CrossEncoderReranker
 from ..vector.embedder import embedding_cache
 from ..vector.chroma_index import chroma_indexer
 
@@ -25,6 +25,7 @@ class EnhancedSearch:
         self.first_stage_k = first_stage_k
         self.final_k = final_k
         self.enable_rerank = enable_rerank
+        self.reranker = CrossEncoderReranker() if enable_rerank else None
     
     def search(self, query: str, 
                where_filter: Optional[Dict[str, Any]] = None,
@@ -66,27 +67,29 @@ class EnhancedSearch:
                 }
             
             # 3단계: 리랭크 (옵션)
-            if self.enable_rerank and len(first_stage_results) > self.final_k:
-                final_results = reranker.rerank(
+            if self.enable_rerank and self.reranker and len(first_stage_results) > self.final_k:
+                # 문서 텍스트 추출
+                doc_texts = [doc["document"] for doc in first_stage_results]
+                
+                # 리랭킹 실행
+                reranked_results = self.reranker.rerank_with_metadata(
                     query=query,
                     documents=first_stage_results,
                     top_k=self.final_k
                 )
                 
-                # 리랭크 통계
-                rerank_stats = reranker.get_rerank_stats(
-                    first_stage_results, final_results
-                )
+                final_results = reranked_results
+                rerank_stats = {"rerank_enabled": True}
             else:
                 final_results = first_stage_results[:self.final_k]
-                rerank_stats = {}
+                rerank_stats = {"rerank_enabled": False}
             
             # 4단계: 결과 포맷팅
             formatted_results = []
             for i, doc in enumerate(final_results):
                 result_item = {
                     "rank": i + 1,
-                    "document": doc["document"],
+                    "document": doc.get("document", doc.get("text", "")),
                     "score": doc.get("rerank_score", doc.get("score", 0.0)),
                     "original_score": doc.get("score", 0.0)
                 }

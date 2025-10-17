@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 import time
 from datetime import datetime
 
-from .quality_guard import quality_guard, QualityResult
+from ..llm.quality_guard import QualityGuard, QualityResult
 from .guide_based_generator import GuideBasedGenerator
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ class EnhancedGenerator:
     def __init__(self, max_retries: int = 2):
         self.max_retries = max_retries
         self.base_generator = GuideBasedGenerator()
+        self.quality_guard = QualityGuard()
     
     def generate_with_quality_guard(self, 
                                   query: str,
