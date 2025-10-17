@@ -40,3 +40,6 @@ echo "1. 백엔드 실행: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 -
 echo "2. 프론트엔드 실행: npm run dev"
 
 
+
+
+

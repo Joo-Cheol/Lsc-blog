@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 class NaverBlogCrawler:
     """네이버 블로그 증분 크롤러"""
     
-    def __init__(self, blog_id: str, category_no: int, seen_db_path: str, 
+    def __init__(self, blog_id: str, category_no: int = None, seen_db_path: str = None, 
                  delay_min_ms: int = 600, delay_max_ms: int = 1400):
         self.blog_id = blog_id
         self.category_no = category_no
-        self.storage = SeenStorage(seen_db_path)
+        self.storage = SeenStorage(seen_db_path) if seen_db_path else SeenStorage()
         self.delay_min_ms = delay_min_ms
         self.delay_max_ms = delay_max_ms
         self.session = requests.Session()
@@ -37,20 +37,55 @@ class NaverBlogCrawler:
         delay_ms = random.randint(self.delay_min_ms, self.delay_max_ms)
         time.sleep(delay_ms / 1000.0)
     
-    def _get_blog_list_url(self, page: int = 1) -> str:
+    def _get_blog_list_url(self, page: int = 1, category_no: int = None) -> str:
         """블로그 목록 URL 생성"""
+        cat_no = category_no if category_no is not None else self.category_no
         return (
             f"https://blog.naver.com/PostList.naver?"
-            f"blogId={self.blog_id}&categoryNo={self.category_no}&currentPage={page}"
+            f"blogId={self.blog_id}&categoryNo={cat_no}&currentPage={page}"
         )
     
     def _get_post_url(self, logno: str) -> str:
         """포스트 URL 생성"""
         return f"https://blog.naver.com/PostView.naver?blogId={self.blog_id}&logNo={logno}"
     
-    def fetch_post_list(self, page: int = 1) -> List[Dict[str, str]]:
+    def fetch_categories(self) -> List[int]:
+        """카테고리 목록 조회 (실패 시 [None] 반환)"""
+        try:
+            # 네이버 블로그 카테고리 API 시도
+            url = f"https://blog.naver.com/PostList.naver?blogId={self.blog_id}"
+            response = self.session.get(url)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            # 카테고리 링크에서 categoryNo 추출 시도
+            category_links = soup.find_all('a', href=lambda x: x and 'categoryNo=' in x)
+            categories = []
+            
+            for link in category_links:
+                href = link.get('href', '')
+                if 'categoryNo=' in href:
+                    try:
+                        cat_no = int(href.split('categoryNo=')[1].split('&')[0])
+                        if cat_no not in categories:
+                            categories.append(cat_no)
+                    except (ValueError, IndexError):
+                        continue
+            
+            if categories:
+                logger.info(f"발견된 카테고리: {categories}")
+                return categories
+            else:
+                logger.warning("카테고리를 찾을 수 없음, 전체(0)로 폴백")
+                return [0]  # 전체 카테고리
+                
+        except Exception as e:
+            logger.warning(f"카테고리 조회 실패: {e}, 전체(0)로 폴백")
+            return [0]  # 전체 카테고리
+
+    def fetch_post_list(self, page: int = 1, category_no: int = None) -> List[Dict[str, str]]:
         """포스트 목록 조회"""
-        url = self._get_blog_list_url(page)
+        url = self._get_blog_list_url(page, category_no)
         
         try:
             response = self.session.get(url, timeout=10)
@@ -118,9 +153,11 @@ class NaverBlogCrawler:
         if not run_id:
             run_id = f"crawl_{int(time.time())}"
         
-        logger.info(f"[{run_id}] 증분 크롤링 시작 - 블로그: {self.blog_id}, 카테고리: {self.category_no}")
+        # 카테고리 자동화: category_no가 None이면 전체 카테고리 순회
+        categories = [self.category_no] if self.category_no is not None else self.fetch_categories()
+        logger.info(f"[{run_id}] 증분 크롤링 시작 - 블로그: {self.blog_id}, 카테고리: {categories}")
         
-        stats = {
+        total_stats = {
             'total_found': 0,
             'new_posts': 0,
             'duplicate_content': 0,
@@ -128,16 +165,28 @@ class NaverBlogCrawler:
             'pages_processed': 0
         }
         
-        last_logno = self.storage.get_last_logno()
-        logger.info(f"[{run_id}] 마지막 처리 logno: {last_logno}")
-        
-        for page in range(1, max_pages + 1):
-            logger.info(f"[{run_id}] 페이지 {page} 처리 중...")
+        # 각 카테고리별로 크롤링
+        for category_no in categories:
+            logger.info(f"[{run_id}] 카테고리 {category_no} 크롤링 시작...")
             
-            posts = self.fetch_post_list(page)
-            if not posts:
-                logger.info(f"[{run_id}] 페이지 {page}에서 포스트 없음, 크롤링 종료")
-                break
+            stats = {
+                'total_found': 0,
+                'new_posts': 0,
+                'duplicate_content': 0,
+                'failed': 0,
+                'pages_processed': 0
+            }
+            
+            last_logno = self.storage.get_last_logno()
+            logger.info(f"[{run_id}] 마지막 처리 logno: {last_logno}")
+            
+            for page in range(1, max_pages + 1):
+                logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page} 처리 중...")
+                
+                posts = self.fetch_post_list(page, category_no)
+                if not posts:
+                    logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page}에서 포스트 없음")
+                    break
             
             stats['total_found'] += len(posts)
             stats['pages_processed'] = page
@@ -182,24 +231,30 @@ class NaverBlogCrawler:
                     stats['new_posts'] += 1
                     logger.info(f"[{run_id}] 포스트 업데이트: {post['title'][:50]}...")
             
-            # 페이지 간 딜레이
-            if page < max_pages:
-                self._random_delay()
+                # 페이지 간 딜레이
+                if page < max_pages:
+                    self._random_delay()
+            
+            # 카테고리별 통계 누적
+            for key in total_stats:
+                total_stats[key] += stats[key]
+            
+            logger.info(f"[{run_id}] 카테고리 {category_no} 완료 - {stats}")
         
         # 마지막 logno 갱신 (set_last_logno → update_checkpoint)
-        if stats['total_found'] > 0:
+        if total_stats['total_found'] > 0:
             latest_posts = self.fetch_post_list(1)
             if latest_posts:
                 latest_logno = max(int(p['logno']) for p in latest_posts)
                 self.storage.update_checkpoint(latest_logno, {
-                    'total': stats['total_found'],
-                    'new': stats['new_posts'],
-                    'updated': stats['duplicate_content'],
+                    'total': total_stats['total_found'],
+                    'new': total_stats['new_posts'],
+                    'updated': total_stats['duplicate_content'],
                 })
                 logger.info(f"[{run_id}] 마지막 logno 업데이트: {latest_logno}")
         
-        logger.info(f"[{run_id}] 크롤링 완료 - {stats}")
-        return stats
+        logger.info(f"[{run_id}] 전체 크롤링 완료 - {total_stats}")
+        return total_stats
     
     def get_crawl_stats(self) -> Dict:
         """크롤링 통계 조회"""
