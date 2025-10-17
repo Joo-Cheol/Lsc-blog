@@ -17,9 +17,16 @@ class ProviderType(str, Enum):
 
 class CrawlRequest(BaseModel):
     """크롤링 요청 스키마"""
-    blog_url: HttpUrl = Field(..., description="네이버 블로그 URL")
+    blog_url: Optional[HttpUrl] = Field(None, description="네이버 블로그 URL (새 UX)")
+    blog_id: Optional[str] = Field(None, description="네이버 블로그 ID (구버전 호환)")
     category_no: Optional[int] = Field(None, description="카테고리 번호 (미지정 시 전체)")
     max_pages: Optional[int] = Field(None, description="최대 페이지 수 (미지정 시 끝까지)")
+    
+    @validator('blog_id')
+    def validate_blog_id(cls, v):
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError('blog_id는 비어있을 수 없습니다')
+        return v.strip() if v else v
     
     @validator('category_no')
     def validate_category_no(cls, v):
@@ -44,6 +51,7 @@ class CrawlResponse(BaseModel):
     last_logno_updated: Optional[str] = Field(None, description="마지막 logno")
     duration_ms: int = Field(..., description="실행 시간 (밀리초)")
     message: Optional[str] = Field(None, description="추가 메시지")
+    blog_id: Optional[str] = Field(None, description="블로그 ID")
 
 
 class IndexRequest(BaseModel):

@@ -31,8 +31,14 @@ async def crawl_blog(request: CrawlRequest):
     run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     try:
-        # 블로그 URL에서 blog_id 추출
-        blog_id = parse_blog_id(str(request.blog_url))
+        # blog_id 결정 (호환성: blog_url 또는 blog_id)
+        blog_id = request.blog_id
+        if not blog_id and request.blog_url:
+            blog_id = parse_blog_id(str(request.blog_url))
+        
+        if not blog_id:
+            raise HTTPException(status_code=400, detail="blog_url 또는 blog_id를 제공하세요.")
+        
         logger.info(f"크롤링 시작: {blog_id}, 카테고리 {request.category_no}")
         
         # 크롤러 초기화
@@ -79,7 +85,8 @@ async def crawl_blog(request: CrawlRequest):
             failed_count=results["failed_count"],
             last_logno_updated=results.get("last_logno_updated"),
             duration_ms=duration_ms,
-            message=f"크롤링이 성공적으로 완료되었습니다. {results['crawled_count']}개 포스트를 수집했습니다."
+            message=f"크롤링이 성공적으로 완료되었습니다. {results['crawled_count']}개 포스트를 수집했습니다.",
+            blog_id=blog_id
         )
         
     except Exception as e:

@@ -6,19 +6,25 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // 호환성: 구버전에서 blog_id/category_no/max_pages가 올 수도 있음
+    // → 있으면 그대로 유지, 없으면 blog_url만 사용
+    const payload = body?.blog_id || body?.category_no || body?.max_pages
+      ? body
+      : { blog_url: body?.blog_url };
+    
     // API 서버로 요청 전달
     const response = await fetch(`${API_BASE_URL}/api/v1/crawl`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
       return NextResponse.json(
-        { success: false, error: errorData.detail || '크롤링 요청 실패' },
+        { success: false, error: errorData.error || errorData.detail || '크롤링 요청 실패' },
         { status: response.status }
       );
     }
