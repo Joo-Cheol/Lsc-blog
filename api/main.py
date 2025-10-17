@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from contextlib import asynccontextmanager
+from datetime import datetime
 from .core.config import get_settings, validate_settings
 from .core.logging import get_logger, setup_logging
 from .core.middleware import setup_middleware

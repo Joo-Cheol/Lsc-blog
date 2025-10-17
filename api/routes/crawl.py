@@ -65,25 +65,27 @@ async def crawl_blog(request: CrawlRequest):
         # 실행 시간 계산
         duration_ms = int((time.time() - start_time) * 1000)
         
-        # 비즈니스 이벤트 로깅
+        # 새 키셋으로 변환
+        crawled = results.get("new_posts", 0) + results.get("duplicate_content", 0)
+        skipped = results.get("duplicate_content", 0)
+        failed = results.get("failed", 0)
+        
+        # 비즈니스 이벤트 로깅 (변환된 값으로)
         log_business_event(
             "crawl_completed",
             run_id=run_id,
-            blog_id=request.blog_id,
+            blog_id=blog_id,
             category_no=request.category_no,
             max_pages=request.max_pages,
-            crawled_count=results["crawled_count"],
-            skipped_count=results["skipped_count"],
-            failed_count=results["failed_count"],
+            crawled_count=crawled,
+            skipped_count=skipped,
+            failed_count=failed,
             duration_ms=duration_ms
         )
         
         logger.info(f"크롤링 완료: {results}")
         
-        # results dict를 라우트의 응답 스키마에 맞게 맵핑
-        crawled = results.get("new_posts", 0) + results.get("duplicate_content", 0)
-        skipped = results.get("duplicate_content", 0)
-        failed = results.get("failed", 0)
+        # results dict를 라우트의 응답 스키마에 맞게 맵핑 (이미 위에서 계산됨)
         
         return CrawlResponse(
             success=True,

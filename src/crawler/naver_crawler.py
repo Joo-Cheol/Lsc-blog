@@ -191,11 +191,12 @@ class NaverBlogCrawler:
             stats['total_found'] += len(posts)
             stats['pages_processed'] = page
             
-            # logno 기준으로 필터링 (증분 수집)
+            # logno 기준으로 필터링 (증분 수집) - 안전한 타입 비교
             if last_logno:
-                posts = [p for p in posts if p['logno'] > last_logno]
+                last_logno_int = int(last_logno)
+                posts = [p for p in posts if int(p.get('logno', 0)) > last_logno_int]
                 if not posts:
-                    logger.info(f"[{run_id}] 페이지 {page}에서 새로운 포스트 없음")
+                    logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page}에서 새로운 포스트 없음")
                     continue
             
             for post in posts:
