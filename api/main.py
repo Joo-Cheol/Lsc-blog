@@ -7,9 +7,8 @@ import sys
 import os
 from pathlib import Path
 
-# 프로젝트 루트를 sys.path에 추가
+# 프로젝트 루트 설정 (sys.path 조작 대신 상대 import 사용)
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import JSONResponse
@@ -38,9 +37,10 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 생명주기 관리"""
-    # 시작 시간 기록
+    # 시작 시간 기록 (uvicorn 모듈 실행에서도 정확한 uptime 보장)
     import time
     app.state.start_time = time.time()
+    logger.debug(f"Application start_time initialized: {app.state.start_time}")
     
     # 시작 시 실행
     logger.info("애플리케이션 시작", extra={
@@ -135,7 +135,7 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
+async def health_check(return_503_on_degraded: bool = False):
     """헬스 체크"""
     from datetime import datetime
     import time
@@ -184,10 +184,21 @@ async def health_check():
     try:
         from src.vector.embedder import embedding_cache
         cache_stats = embedding_cache.get_cache_stats()
+        
+        # hit_rate 계산
+        total_accesses = cache_stats.get("total_accesses", 0)
+        total_embeddings = cache_stats.get("total_embeddings", 0)
+        if total_accesses > 0:
+            hits = total_accesses - total_embeddings
+            hit_rate = (hits / total_accesses) * 100
+        else:
+            hit_rate = 0.0
+        
         cache_status = {
             "status": "healthy",
-            "total_embeddings": cache_stats.get("total_embeddings", 0),
-            "hit_rate": "N/A"  # 실제 hit rate는 별도 계산 필요
+            "total_embeddings": total_embeddings,
+            "total_accesses": total_accesses,
+            "hit_rate": f"{hit_rate:.1f}%"
         }
     except Exception as e:
         cache_status = {"status": "error", "error": str(e)}
@@ -199,7 +210,7 @@ async def health_check():
         chroma_status["status"] == "error"):
         overall_status = "degraded"
     
-    return HealthResponse(
+    health_response = HealthResponse(
         status=overall_status,
         timestamp=datetime.now(),
         version=settings.app_version,
@@ -209,6 +220,13 @@ async def health_check():
         embedding_cache=cache_status,
         uptime_seconds=int(time.time() - app.state.start_time) if hasattr(app.state, 'start_time') else 0
     )
+    
+    # degraded 상태에서 503 반환 옵션
+    if return_503_on_degraded and overall_status == "degraded":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail=health_response.dict())
+    
+    return health_response
 
 
 @app.get("/stats", response_model=StatsResponse)
@@ -262,18 +280,34 @@ async def get_stats():
         except Exception as e:
             logger.error(f"Provider 통계 조회 실패: {e}")
         
+        # 운영 메트릭 카운터 가져오기
+        op_metrics = {"search": 0, "generate": 0, "crawl": 0, "upload": 0}
+        try:
+            from api.core.middleware import RequestLoggingMiddleware
+            # 미들웨어 인스턴스에서 카운터 가져오기
+            for middleware in app.user_middleware:
+                if isinstance(middleware.cls, RequestLoggingMiddleware):
+                    if hasattr(middleware.cls, '_op_metrics'):
+                        op_metrics = middleware.cls._op_metrics
+                    break
+        except Exception as e:
+            logger.error(f"운영 메트릭 조회 실패: {e}")
+        
         # 통합 통계
         stats = {
             "total_posts": crawler_stats.get("total_posts", 0),
             "total_chunks": chroma_stats.get("total_documents", 0),
-            "total_searches": 0,  # TODO: 검색 통계 추가
-            "total_generations": 0,  # TODO: 생성 통계 추가
+            "total_searches": op_metrics.get("search", 0),
+            "total_generations": op_metrics.get("generate", 0),
+            "total_crawls": op_metrics.get("crawl", 0),
+            "total_uploads": op_metrics.get("upload", 0),
             "last_crawl": crawler_stats.get("last_crawl", None),
             "last_index": chroma_stats.get("last_updated", None),
             "provider_stats": provider_stats,
             "crawler_stats": crawler_stats,
             "chroma_stats": chroma_stats,
-            "cache_stats": cache_stats
+            "cache_stats": cache_stats,
+            "operation_metrics": op_metrics
         }
         
         return StatsResponse(success=True, **stats)

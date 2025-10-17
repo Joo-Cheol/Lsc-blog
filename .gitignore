@@ -69,10 +69,19 @@ src/data/**
 # vector caches
 *.duckdb
 *.sqlite
+data/embedding_cache.db
+data/*.db
 
 # chroma
 src/data/indexes/**
+chroma/
+**/chroma/
 
 # 백업 파일
 backups/
 *.backup
+
+# 운영 데이터
+data/samples/
+data/processed/
+data/meta/

@@ -9,6 +9,7 @@ RAG(Retrieval-Augmented Generation) 기반의 채권추심 전문 블로그 글 
 - **RAG 기반 글 생성**: Gemini API를 통한 전문적이고 SEO 최적화된 블로그 글 생성
 - **대화형 인터페이스**: 사용자 친화적인 명령어 기반 시스템
 - **Next.js 웹 인터페이스**: 현대적인 웹 UI 제공
+- **운영 모니터링**: 실시간 헬스 체크, 통계, 임베딩 캐시 hit rate 모니터링
 
 ## 📋 시스템 요구사항
 
@@ -199,6 +200,7 @@ cat .env
 - **청크 크기 조정**: `src/search/embedding.py`의 `chunk_size` 파라미터 조정
 - **검색 결과 수**: `n_references` 파라미터로 참조 문서 수 조정
 - **크롤링 간격**: `src/crawler.py`의 `time.sleep()` 값 조정
+- **임베딩 캐시 hit rate**: `(total_accesses - total_embeddings) / total_accesses * 100` - 캐시 효율성 지표
 
 ## 🤝 기여하기
 

@@ -49,6 +49,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             # 응답 시간 계산
             duration_ms = int((time.time() - start_time) * 1000)
             
+            # 운영 메트릭 카운터 증가 (성공한 요청만)
+            self._increment_operation_counter(request.url.path)
+            
             # 응답 로깅
             log_api_request(
                 method=request.method,
@@ -65,7 +68,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             return response
             
         except Exception as e:
-            # 오류 발생 시 로깅
+            # 오류 발생 시 로깅 (카운터는 증가하지 않음 - 실패한 요청)
             duration_ms = int((time.time() - start_time) * 1000)
             logger.error(
                 f"요청 처리 중 오류: {str(e)}",
@@ -99,6 +102,31 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         finally:
             # 컨텍스트 정리
             clear_context()
+    
+    def _increment_operation_counter(self, path: str):
+        """운영 메트릭 카운터 증가"""
+        # 전역 카운터 사용 (간단한 구현)
+        try:
+            import threading
+            if not hasattr(self, '_lock'):
+                self._lock = threading.Lock()
+            
+            with self._lock:
+                if not hasattr(self, '_op_metrics'):
+                    self._op_metrics = {"search": 0, "generate": 0, "crawl": 0, "upload": 0}
+                
+                # 경로별 카운터 증가
+                if "/search" in path:
+                    self._op_metrics["search"] += 1
+                elif "/generate" in path:
+                    self._op_metrics["generate"] += 1
+                elif "/crawl" in path:
+                    self._op_metrics["crawl"] += 1
+                elif "/upload" in path:
+                    self._op_metrics["upload"] += 1
+        except Exception:
+            # 메트릭 수집 실패 시 무시
+            pass
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

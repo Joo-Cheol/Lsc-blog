@@ -20,10 +20,13 @@ logger = logging.getLogger(__name__)
 class EmbeddingCache:
     """임베딩 캐시 시스템"""
     
-    def __init__(self, cache_path: str = "data/embedding_cache.db", model_name: str = "jhgan/ko-sroberta-multitask"):
-        self.cache_path = Path(cache_path)
+    def __init__(self, cache_path: str = None, model_name: str = None, batch_size: int = None):
+        # 환경변수에서 설정 가져오기
+        import os
+        self.cache_path = Path(cache_path or os.getenv("EMBEDDING_CACHE_DB", "data/embedding_cache.db"))
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.model_name = model_name
+        self.model_name = model_name or os.getenv("EMBED_MODEL", "jhgan/ko-sroberta-multitask")
+        self.batch_size = batch_size or int(os.getenv("EMBED_BATCH_SIZE", "32"))
         self.model = None
         self._init_cache()
     
@@ -156,7 +159,7 @@ class EmbeddingCache:
             miss_hashes = [item[2] for item in cache_misses]
             
             start_time = time.time()
-            batch_embeddings = self.model.encode(miss_texts, convert_to_numpy=True, batch_size=32)
+            batch_embeddings = self.model.encode(miss_texts, convert_to_numpy=True, batch_size=self.batch_size)
             compute_time = time.time() - start_time
             
             # 결과 정렬 및 캐시 저장
@@ -222,9 +225,9 @@ class EmbeddingCache:
         with sqlite3.connect(self.cache_path) as conn:
             cursor = conn.execute("""
                 DELETE FROM embedding_cache 
-                WHERE created_at < datetime('now', '-{} days')
+                WHERE created_at < datetime('now', '-? days')
                 AND access_count < ?
-            """.format(days, min_access_count))
+            """, (days, min_access_count))
             deleted_count = cursor.rowcount
             conn.commit()
             logger.info(f"Cleaned up {deleted_count} old cache entries")
