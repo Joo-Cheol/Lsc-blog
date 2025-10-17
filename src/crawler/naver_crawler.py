@@ -149,7 +149,8 @@ class NaverBlogCrawler:
             return None
     
     def crawl_incremental(self, max_pages: int = 5, run_id: str = None, 
-                         on_page: callable = None, on_new: callable = None, on_skip: callable = None) -> Dict[str, int]:
+                         on_page: callable = None, on_new: callable = None, on_skip: callable = None, 
+                         on_event: callable = None) -> Dict[str, int]:
         """증분 크롤링 실행"""
         if not run_id:
             run_id = f"crawl_{int(time.time())}"
@@ -158,18 +159,38 @@ class NaverBlogCrawler:
         categories = [self.category_no] if self.category_no is not None else self.fetch_categories()
         logger.info(f"[{run_id}] 증분 크롤링 시작 - 블로그: {self.blog_id}, 카테고리: {categories}")
         
+        # 시작 이벤트
+        if on_event:
+            on_event("crawl_started", {
+                "blog_id": self.blog_id,
+                "categories": categories,
+                "max_pages": max_pages,
+                "run_id": run_id
+            })
+        
         total_stats = {
             'total_found': 0,
             'new_posts': 0,
             'duplicate_content': 0,
             'failed': 0,
             'pages_processed': 0,
-            'collected_posts': []  # 수집된 글 목록 추가
+            'collected_posts': [],  # 수집된 글 목록 추가
+            'categories_processed': 0,
+            'start_time': time.time(),
+            'request_errors': 0,
+            'retry_count': 0
         }
         
         # 각 카테고리별로 크롤링
         for category_no in categories:
             logger.info(f"[{run_id}] 카테고리 {category_no} 크롤링 시작...")
+            
+            # 카테고리 시작 이벤트
+            if on_event:
+                on_event("category_started", {
+                    "category_no": category_no,
+                    "total_categories": len(categories)
+                })
             
             stats = {
                 'total_found': 0,
@@ -177,7 +198,8 @@ class NaverBlogCrawler:
                 'duplicate_content': 0,
                 'failed': 0,
                 'pages_processed': 0,
-                'collected_posts': []  # 수집된 글 목록 추가
+                'collected_posts': [],  # 수집된 글 목록 추가
+                'category_start_time': time.time()
             }
             
             last_logno = self.storage.get_last_logno()
@@ -193,79 +215,96 @@ class NaverBlogCrawler:
                 posts = self.fetch_post_list(page, category_no)
                 if not posts:
                     logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page}에서 포스트 없음")
+                    # 페이지 완료 이벤트
+                    if on_event:
+                        on_event("page_completed", {
+                            "category_no": category_no,
+                            "page": page,
+                            "posts_found": 0,
+                            "status": "empty"
+                        })
                     break
             
                 stats['total_found'] += len(posts)
                 stats['pages_processed'] = page
-            
-            # logno 기준으로 필터링 (증분 수집) - 안전한 타입 비교
-            if last_logno:
-                last_logno_int = int(last_logno)
-                posts = [p for p in posts if int(p.get('logno', 0)) > last_logno_int]
-                if not posts:
-                    logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page}에서 새로운 포스트 없음")
-                    continue
-            
-            for post in posts:
-                self._random_delay()
                 
-                # 이미 본 URL은 스킵 (이전 이름 is_new_post → 실제 구현에 맞게)
-                if self.storage.is_post_seen(post['url']):
-                    logger.debug(f"[{run_id}] 이미 수집된 포스트 스킵: {post['url']}")
-                    continue
+                # 페이지 완료 이벤트
+                if on_event:
+                    on_event("page_completed", {
+                        "category_no": category_no,
+                        "page": page,
+                        "posts_found": len(posts),
+                        "status": "success"
+                    })
                 
-                # 포스트 내용 조회
-                post_data = self.fetch_post_content(post['url'])
-                if not post_data:
-                    stats['failed'] += 1
-                    continue
+                # logno 기준으로 필터링 (증분 수집) - 안전한 타입 비교
+                if last_logno:
+                    last_logno_int = int(last_logno)
+                    posts = [p for p in posts if int(p.get('logno', 0)) > last_logno_int]
+                    if not posts:
+                        logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page}에서 새로운 포스트 없음")
+                        continue
                 
-                # 중복 콘텐츠 판단 및 저장 (add_seen_post가 'new/updated/unchanged' 반환)
-                status = self.storage.add_seen_post(
-                    post['url'], 
-                    int(post['logno']), 
-                    post_data['content'], 
-                    title=post['title']
-                )
+                for post in posts:
+                    self._random_delay()
+                    
+                    # 이미 본 URL은 스킵 (이전 이름 is_new_post → 실제 구현에 맞게)
+                    if self.storage.is_post_seen(post['url']):
+                        logger.debug(f"[{run_id}] 이미 수집된 포스트 스킵: {post['url']}")
+                        continue
+                    
+                    # 포스트 내용 조회
+                    post_data = self.fetch_post_content(post['url'])
+                    if not post_data:
+                        stats['failed'] += 1
+                        continue
+                    
+                    # 중복 콘텐츠 판단 및 저장 (add_seen_post가 'new/updated/unchanged' 반환)
+                    status = self.storage.add_seen_post(
+                        post['url'], 
+                        int(post['logno']), 
+                        post_data['content'], 
+                        title=post['title']
+                    )
+                    
+                    if status == "new":
+                        stats['new_posts'] += 1
+                        post_info = {
+                            'title': post['title'],
+                            'url': post['url'],
+                            'logno': post['logno'],
+                            'status': 'new'
+                        }
+                        stats['collected_posts'].append(post_info)
+                        if on_new:
+                            on_new(post_info)
+                        logger.info(f"[{run_id}] 새 포스트 추가: {post['title'][:50]}...")
+                    elif status == "unchanged":
+                        stats['duplicate_content'] += 1
+                        post_info = {
+                            'title': post['title'],
+                            'url': post['url'],
+                            'logno': post['logno'],
+                            'status': 'duplicate'
+                        }
+                        stats['collected_posts'].append(post_info)
+                        if on_skip:
+                            on_skip(post_info)
+                        logger.info(f"[{run_id}] 중복 내용 스킵: {post['title'][:50]}...")
+                    else:
+                        # updated
+                        stats['new_posts'] += 1
+                        post_info = {
+                            'title': post['title'],
+                            'url': post['url'],
+                            'logno': post['logno'],
+                            'status': 'updated'
+                        }
+                        stats['collected_posts'].append(post_info)
+                        if on_new:
+                            on_new(post_info)
+                        logger.info(f"[{run_id}] 포스트 업데이트: {post['title'][:50]}...")
                 
-                if status == "new":
-                    stats['new_posts'] += 1
-                    post_info = {
-                        'title': post['title'],
-                        'url': post['url'],
-                        'logno': post['logno'],
-                        'status': 'new'
-                    }
-                    stats['collected_posts'].append(post_info)
-                    if on_new:
-                        on_new(post_info)
-                    logger.info(f"[{run_id}] 새 포스트 추가: {post['title'][:50]}...")
-                elif status == "unchanged":
-                    stats['duplicate_content'] += 1
-                    post_info = {
-                        'title': post['title'],
-                        'url': post['url'],
-                        'logno': post['logno'],
-                        'status': 'duplicate'
-                    }
-                    stats['collected_posts'].append(post_info)
-                    if on_skip:
-                        on_skip(post_info)
-                    logger.info(f"[{run_id}] 중복 내용 스킵: {post['title'][:50]}...")
-                else:
-                    # updated
-                    stats['new_posts'] += 1
-                    post_info = {
-                        'title': post['title'],
-                        'url': post['url'],
-                        'logno': post['logno'],
-                        'status': 'updated'
-                    }
-                    stats['collected_posts'].append(post_info)
-                    if on_new:
-                        on_new(post_info)
-                    logger.info(f"[{run_id}] 포스트 업데이트: {post['title'][:50]}...")
-            
                 # 페이지 간 딜레이
                 if page < max_pages:
                     self._random_delay()
