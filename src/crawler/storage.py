@@ -1,219 +1,199 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-증분 수집 & 중복 제거를 위한 seen.sqlite 관리
+크롤러 증분/중복 제어 스토리지
+- seen_posts: 수집된 포스트 추적
+- checkpoints: 마지막 수집 위치 추적
 """
+
 import sqlite3
-import time
 import hashlib
-import os
-from typing import Optional, List, Tuple
+import json
+from datetime import datetime
+from typing import Optional, Dict, Any, List
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-def get_conn(path: str) -> sqlite3.Connection:
-    """SQLite 연결 생성 (WAL 모드)"""
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
-    return conn
-
-
-def init_schema(conn: sqlite3.Connection) -> None:
-    """테이블 스키마 초기화"""
-    conn.executescript("""
-    CREATE TABLE IF NOT EXISTS seen_posts(
-      url TEXT PRIMARY KEY,
-      logno TEXT,
-      content_hash TEXT,
-      first_seen_at INTEGER,
-      last_seen_at INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS checkpoints(
-      key TEXT PRIMARY KEY,
-      value TEXT,
-      updated_at INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_seen_posts_logno ON seen_posts(logno);
-    CREATE INDEX IF NOT EXISTS idx_seen_posts_content_hash ON seen_posts(content_hash);
-    """)
-    conn.commit()
-
-
-def upsert_seen(conn: sqlite3.Connection, url: str, logno: str, content_hash: str) -> None:
-    """seen_posts 테이블에 포스트 정보 저장/업데이트"""
-    now = int(time.time())
-    conn.execute("""
-        INSERT INTO seen_posts(url, logno, content_hash, first_seen_at, last_seen_at)
-        VALUES(?, ?, ?, ?, ?)
-        ON CONFLICT(url) DO UPDATE SET 
-            last_seen_at = excluded.last_seen_at,
-            content_hash = excluded.content_hash
-    """, (url, logno, content_hash, now, now))
-    conn.commit()
-
-
-def get_checkpoint(conn: sqlite3.Connection, key: str) -> Optional[str]:
-    """체크포인트 값 조회"""
-    cur = conn.execute("SELECT value FROM checkpoints WHERE key = ?", (key,))
-    row = cur.fetchone()
-    return row[0] if row else None
-
-
-def set_checkpoint(conn: sqlite3.Connection, key: str, value: str) -> None:
-    """체크포인트 값 설정"""
-    now = int(time.time())
-    conn.execute("""
-        INSERT INTO checkpoints(key, value, updated_at)
-        VALUES(?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET 
-            value = excluded.value, 
-            updated_at = excluded.updated_at
-    """, (key, value, now))
-    conn.commit()
-
-
-def is_url_seen(conn: sqlite3.Connection, url: str) -> bool:
-    """URL이 이미 수집되었는지 확인"""
-    cur = conn.execute("SELECT 1 FROM seen_posts WHERE url = ?", (url,))
-    return cur.fetchone() is not None
-
-
-def is_content_duplicate(conn: sqlite3.Connection, content_hash: str) -> bool:
-    """동일한 내용이 이미 인덱싱되었는지 확인"""
-    cur = conn.execute("SELECT 1 FROM seen_posts WHERE content_hash = ?", (content_hash,))
-    return cur.fetchone() is not None
-
-
-def get_content_hash(text: str) -> str:
-    """텍스트의 SHA-256 해시 생성"""
-    return hashlib.sha256(text.encode('utf-8')).hexdigest()
-
-
-def get_posts_after_logno(conn: sqlite3.Connection, last_logno: str) -> List[Tuple[str, str, str]]:
-    """특정 logno 이후의 포스트 목록 조회"""
-    cur = conn.execute("""
-        SELECT url, logno, content_hash 
-        FROM seen_posts 
-        WHERE logno > ? 
-        ORDER BY logno
-    """, (last_logno,))
-    return cur.fetchall()
-
-
-def get_stats(conn: sqlite3.Connection) -> dict:
-    """수집 통계 조회"""
-    cur = conn.execute("SELECT COUNT(*) FROM seen_posts")
-    total_posts = cur.fetchone()[0]
+class CrawlerStorage:
+    """크롤러 증분/중복 제어를 위한 스토리지"""
     
-    cur = conn.execute("SELECT COUNT(DISTINCT content_hash) FROM seen_posts")
-    unique_contents = cur.fetchone()[0]
+    def __init__(self, db_path: str = "data/crawler_storage.db"):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._init_db()
     
-    cur = conn.execute("SELECT MAX(logno) FROM seen_posts WHERE logno IS NOT NULL")
-    max_logno = cur.fetchone()[0]
+    def _init_db(self):
+        """데이터베이스 초기화"""
+        with sqlite3.connect(self.db_path) as conn:
+            # seen_posts 테이블: 수집된 포스트 추적
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS seen_posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT UNIQUE NOT NULL,
+                    logno INTEGER NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    title TEXT,
+                    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_updated BOOLEAN DEFAULT FALSE
+                )
+            """)
+            
+            # checkpoints 테이블: 마지막 수집 위치
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS checkpoints (
+                    id INTEGER PRIMARY KEY,
+                    last_logno INTEGER DEFAULT 0,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    total_posts INTEGER DEFAULT 0,
+                    new_posts INTEGER DEFAULT 0,
+                    updated_posts INTEGER DEFAULT 0
+                )
+            """)
+            
+            # 인덱스 생성
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_seen_posts_logno ON seen_posts(logno)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_seen_posts_hash ON seen_posts(content_hash)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_seen_posts_url ON seen_posts(url)")
+            
+            # 기본 체크포인트 삽입 (없는 경우)
+            conn.execute("""
+                INSERT OR IGNORE INTO checkpoints (id, last_logno) 
+                VALUES (1, 0)
+            """)
+            
+            conn.commit()
     
-    return {
-        "total_posts": total_posts,
-        "unique_contents": unique_contents,
-        "max_logno": max_logno,
-        "duplicate_rate": (total_posts - unique_contents) / max(total_posts, 1) * 100
-    }
-
-
-class SeenStorage:
-    """증분 수집 & 중복 제거 관리 클래스"""
+    def get_last_logno(self) -> int:
+        """마지막 수집된 logno 반환"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT last_logno FROM checkpoints WHERE id = 1")
+            result = cursor.fetchone()
+            return result[0] if result else 0
     
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-        self._ensure_db_dir()
-        self.conn = get_conn(db_path)
-        init_schema(self.conn)
+    def update_checkpoint(self, last_logno: int, stats: Dict[str, int]):
+        """체크포인트 업데이트"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                UPDATE checkpoints 
+                SET last_logno = ?, 
+                    last_updated = CURRENT_TIMESTAMP,
+                    total_posts = ?,
+                    new_posts = ?,
+                    updated_posts = ?
+                WHERE id = 1
+            """, (last_logno, stats.get('total', 0), stats.get('new', 0), stats.get('updated', 0)))
+            conn.commit()
     
-    def _ensure_db_dir(self):
-        """DB 디렉터리 생성"""
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+    def is_post_seen(self, url: str) -> bool:
+        """포스트가 이미 수집되었는지 확인"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT 1 FROM seen_posts WHERE url = ?", (url,))
+            return cursor.fetchone() is not None
     
-    def is_new_post(self, url: str) -> bool:
-        """새로운 포스트인지 확인"""
-        return not is_url_seen(self.conn, url)
+    def get_content_hash(self, content: str) -> str:
+        """콘텐츠 해시 생성"""
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()
     
-    def is_new_content(self, content_hash: str) -> bool:
-        """새로운 내용인지 확인"""
-        return not is_content_duplicate(self.conn, content_hash)
+    def is_content_updated(self, url: str, content: str) -> bool:
+        """콘텐츠가 업데이트되었는지 확인"""
+        content_hash = self.get_content_hash(content)
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT content_hash FROM seen_posts WHERE url = ?", 
+                (url,)
+            )
+            result = cursor.fetchone()
+            if not result:
+                return True  # 새로운 포스트
+            return result[0] != content_hash
     
-    def add_post(self, url: str, logno: str, content: str) -> bool:
-        """포스트 추가 (중복 체크 포함)"""
-        content_hash = get_content_hash(content)
+    def add_seen_post(self, url: str, logno: int, content: str, title: str = None) -> str:
+        """포스트를 seen_posts에 추가/업데이트"""
+        content_hash = self.get_content_hash(content)
+        now = datetime.now().isoformat()
         
-        # 이미 동일한 내용이 있으면 스킵
-        if self.is_new_content(content_hash):
-            upsert_seen(self.conn, url, logno, content_hash)
-            return True
-        else:
-            # URL만 업데이트 (내용은 중복)
-            upsert_seen(self.conn, url, logno, content_hash)
-            return False
+        with sqlite3.connect(self.db_path) as conn:
+            # 기존 포스트 확인
+            cursor = conn.execute("SELECT content_hash FROM seen_posts WHERE url = ?", (url,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                if existing[0] != content_hash:
+                    # 콘텐츠 업데이트
+                    conn.execute("""
+                        UPDATE seen_posts 
+                        SET content_hash = ?, title = ?, last_seen_at = ?, is_updated = TRUE
+                        WHERE url = ?
+                    """, (content_hash, title, now, url))
+                    conn.commit()
+                    return "updated"
+                else:
+                    # 변경 없음
+                    conn.execute("""
+                        UPDATE seen_posts 
+                        SET last_seen_at = ?
+                        WHERE url = ?
+                    """, (now, url))
+                    conn.commit()
+                    return "unchanged"
+            else:
+                # 새로운 포스트
+                conn.execute("""
+                    INSERT INTO seen_posts (url, logno, content_hash, title, first_seen_at, last_seen_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (url, logno, content_hash, title, now, now))
+                conn.commit()
+                return "new"
     
-    def get_last_logno(self) -> Optional[str]:
-        """마지막 처리된 logno 조회"""
-        return get_checkpoint(self.conn, "last_logno")
+    def get_crawl_stats(self) -> Dict[str, Any]:
+        """크롤링 통계 반환"""
+        with sqlite3.connect(self.db_path) as conn:
+            # 전체 통계
+            cursor = conn.execute("""
+                SELECT 
+                    COUNT(*) as total_posts,
+                    COUNT(CASE WHEN is_updated = TRUE THEN 1 END) as updated_posts,
+                    MIN(first_seen_at) as first_crawl,
+                    MAX(last_seen_at) as last_crawl
+                FROM seen_posts
+            """)
+            stats = dict(zip([col[0] for col in cursor.description], cursor.fetchone()))
+            
+            # 체크포인트 정보
+            cursor = conn.execute("SELECT last_logno, last_updated FROM checkpoints WHERE id = 1")
+            checkpoint = cursor.fetchone()
+            if checkpoint:
+                stats['last_logno'] = checkpoint[0]
+                stats['last_checkpoint'] = checkpoint[1]
+            
+            return stats
     
-    def set_last_logno(self, logno: str):
-        """마지막 처리된 logno 설정"""
-        set_checkpoint(self.conn, "last_logno", logno)
+    def get_recent_posts(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """최근 수집된 포스트 목록"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("""
+                SELECT url, logno, title, first_seen_at, last_seen_at, is_updated
+                FROM seen_posts 
+                ORDER BY last_seen_at DESC 
+                LIMIT ?
+            """, (limit,))
+            return [dict(row) for row in cursor.fetchall()]
     
-    def get_stats(self) -> dict:
-        """통계 조회"""
-        return get_stats(self.conn)
-    
-    def close(self):
-        """연결 종료"""
-        if self.conn:
-            self.conn.close()
+    def cleanup_old_posts(self, days: int = 30):
+        """오래된 포스트 정리 (선택적)"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                DELETE FROM seen_posts 
+                WHERE last_seen_at < datetime('now', '-{} days')
+            """.format(days))
+            deleted_count = cursor.rowcount
+            conn.commit()
+            logger.info(f"Cleaned up {deleted_count} old posts")
+            return deleted_count
 
 
-# 테스트용 함수
-def test_storage():
-    """저장소 기능 테스트"""
-    import tempfile
-    
-    with tempfile.NamedTemporaryFile(suffix='.sqlite', delete=False) as tmp:
-        db_path = tmp.name
-    
-    try:
-        storage = SeenStorage(db_path)
-        
-        # 테스트 데이터
-        test_url = "https://blog.naver.com/test/123"
-        test_logno = "12345"
-        test_content = "테스트 내용입니다."
-        
-        # 새 포스트 추가
-        assert storage.is_new_post(test_url)
-        assert storage.add_post(test_url, test_logno, test_content)
-        
-        # 중복 체크
-        assert not storage.is_new_post(test_url)
-        
-        # 동일 내용 다른 URL
-        test_url2 = "https://blog.naver.com/test/456"
-        assert not storage.add_post(test_url2, "12346", test_content)  # 내용 중복
-        
-        # 체크포인트 테스트
-        storage.set_last_logno("12345")
-        assert storage.get_last_logno() == "12345"
-        
-        # 통계 확인
-        stats = storage.get_stats()
-        assert stats["total_posts"] == 2
-        assert stats["unique_contents"] == 1
-        
-        print("✅ SeenStorage 테스트 통과")
-        
-    finally:
-        storage.close()
-        os.unlink(db_path)
-
-
-if __name__ == "__main__":
-    test_storage()
+# 전역 인스턴스
+crawler_storage = CrawlerStorage()

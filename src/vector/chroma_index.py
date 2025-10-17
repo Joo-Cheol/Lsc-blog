@@ -1,357 +1,247 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-ChromaDB 벡터 인덱스 관리
+ChromaDB 인덱스 관리 모듈
+- chunk_hash 기반 업서트
+- added/skipped 로그
+- 메타데이터 필터링 지원
 """
-import os
-import hashlib
-import logging
-from typing import List, Dict, Optional, Tuple, Any
-import chromadb
-from chromadb.config import Settings as ChromaSettings
-from .embedder import EmbeddingService
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
+import chromadb
+from chromadb.config import Settings
+from typing import List, Dict, Any, Optional, Tuple
+import logging
+from pathlib import Path
+import json
+from datetime import datetime
+
 logger = logging.getLogger(__name__)
 
 
-class ChromaIndexManager:
-    """ChromaDB 인덱스 관리 클래스"""
+class ChromaIndexer:
+    """ChromaDB 인덱스 관리"""
     
-    def __init__(self, 
-                 collection_name: str = "naver_blog_debt_collection",
-                 persist_directory: str = "./src/data/indexes/default/chroma",
-                 embedding_service: Optional[EmbeddingService] = None):
+    def __init__(self, persist_directory: str = "data/chroma", collection_name: str = "legal_documents"):
+        self.persist_directory = Path(persist_directory)
+        self.persist_directory.mkdir(parents=True, exist_ok=True)
         self.collection_name = collection_name
-        self.persist_directory = persist_directory
-        self.embedding_service = embedding_service or EmbeddingService()
-        
-        # ChromaDB 클라이언트 초기화
-        self.client = self._init_client()
-        self.collection = self._get_or_create_collection()
-        
-        logger.info(f"ChromaDB 인덱스 초기화 완료: {collection_name}")
+        self.client = None
+        self.collection = None
+        self._init_client()
     
     def _init_client(self):
         """ChromaDB 클라이언트 초기화"""
-        # 디렉터리 생성
-        os.makedirs(self.persist_directory, exist_ok=True)
-        
-        # ChromaDB 설정
-        settings = ChromaSettings(
-            persist_directory=self.persist_directory,
-            anonymized_telemetry=False
-        )
-        
-        client = chromadb.PersistentClient(settings=settings)
-        logger.info(f"ChromaDB 클라이언트 초기화: {self.persist_directory}")
-        return client
-    
-    def _get_or_create_collection(self):
-        """컬렉션 조회 또는 생성"""
         try:
-            collection = self.client.get_collection(self.collection_name)
-            logger.info(f"기존 컬렉션 로드: {self.collection_name}")
-        except Exception:
-            collection = self.client.create_collection(
-                name=self.collection_name,
-                metadata={"description": "네이버 블로그 채권추심 관련 문서 벡터 인덱스"}
+            self.client = chromadb.PersistentClient(
+                path=str(self.persist_directory),
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True
+                )
             )
-            logger.info(f"새 컬렉션 생성: {self.collection_name}")
+            
+            # 컬렉션 생성 또는 가져오기
+            try:
+                self.collection = self.client.get_collection(name=self.collection_name)
+                logger.info(f"Loaded existing collection: {self.collection_name}")
+            except Exception:
+                self.collection = self.client.create_collection(
+                    name=self.collection_name,
+                    metadata={"description": "Legal documents for RAG system"}
+                )
+                logger.info(f"Created new collection: {self.collection_name}")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize ChromaDB client: {e}")
+            raise
+    
+    def upsert_chunks(self, chunks: List[Dict[str, Any]], embeddings: List[List[float]], chunk_hashes: List[str]) -> Dict[str, int]:
+        """
+        청크들을 ChromaDB에 업서트
+        Returns: {"added": count, "skipped": count}
+        """
+        if not chunks or not embeddings or not chunk_hashes:
+            return {"added": 0, "skipped": 0}
         
-        return collection
-    
-    def get_content_hash(self, content: str) -> str:
-        """콘텐츠 해시 생성"""
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()
-    
-    def upsert_chunks(self, chunks: List[Dict[str, Any]]) -> Dict[str, int]:
-        """청크들을 벡터 인덱스에 업서트"""
-        if not chunks:
-            return {"added": 0, "skipped": 0, "failed": 0}
+        if len(chunks) != len(embeddings) or len(chunks) != len(chunk_hashes):
+            raise ValueError("chunks, embeddings, and chunk_hashes must have the same length")
         
         added_count = 0
         skipped_count = 0
-        failed_count = 0
         
-        # 배치 처리
+        # 배치 처리 (ChromaDB 권장 크기: 100개씩)
         batch_size = 100
         for i in range(0, len(chunks), batch_size):
-            batch = chunks[i:i + batch_size]
-            batch_result = self._upsert_batch(batch)
+            batch_chunks = chunks[i:i + batch_size]
+            batch_embeddings = embeddings[i:i + batch_size]
+            batch_hashes = chunk_hashes[i:i + batch_size]
             
-            added_count += batch_result["added"]
-            skipped_count += batch_result["skipped"]
-            failed_count += batch_result["failed"]
-        
-        logger.info(f"[INDEX] 배치 업서트 완료: added={added_count}, skipped={skipped_count}, failed={failed_count}")
-        return {
-            "added": added_count,
-            "skipped": skipped_count,
-            "failed": failed_count
-        }
-    
-    def _upsert_batch(self, chunks: List[Dict[str, Any]]) -> Dict[str, int]:
-        """배치 단위로 청크 업서트"""
-        added_count = 0
-        skipped_count = 0
-        failed_count = 0
-        
-        # 처리할 청크들 필터링
-        chunks_to_process = []
-        existing_hashes = set()
-        
-        for chunk in chunks:
+            # 기존 문서 ID 확인
+            existing_ids = set()
             try:
-                content_hash = self.get_content_hash(chunk["text"])
-                
-                # 기존 문서 확인
-                if self._document_exists(content_hash):
-                    logger.debug(f"문서 이미 존재: {content_hash[:8]}...")
-                    skipped_count += 1
-                    continue
-                
-                chunks_to_process.append({
-                    **chunk,
-                    "content_hash": content_hash
-                })
-                existing_hashes.add(content_hash)
-                
+                existing_docs = self.collection.get(ids=batch_hashes)
+                existing_ids = set(existing_docs['ids'])
             except Exception as e:
-                logger.error(f"청크 처리 오류: {e}")
-                failed_count += 1
-        
-        if not chunks_to_process:
-            return {"added": 0, "skipped": skipped_count, "failed": failed_count}
-        
-        # 임베딩 계산
-        texts = [chunk["text"] for chunk in chunks_to_process]
-        embeddings = self.embedding_service.get_embeddings_batch(texts)
-        
-        # ChromaDB에 업서트
-        try:
-            ids = [chunk["content_hash"] for chunk in chunks_to_process]
-            metadatas = [self._prepare_metadata(chunk) for chunk in chunks_to_process]
+                logger.debug(f"No existing documents found for batch: {e}")
             
-            self.collection.upsert(
-                ids=ids,
-                embeddings=embeddings,
-                metadatas=metadatas,
-                documents=texts
-            )
+            # 새로운 문서만 필터링
+            new_chunks = []
+            new_embeddings = []
+            new_ids = []
+            new_metadatas = []
             
-            added_count = len(chunks_to_process)
-            logger.info(f"[INDEX] 배치 추가: {added_count}개 문서")
+            for chunk, embedding, chunk_hash in zip(batch_chunks, batch_embeddings, batch_hashes):
+                if chunk_hash not in existing_ids:
+                    new_chunks.append(chunk['text'])
+                    new_embeddings.append(embedding)
+                    new_ids.append(chunk_hash)
+                    
+                    # 메타데이터 구성
+                    metadata = {
+                        "source_url": chunk.get('source_url', ''),
+                        "logno": chunk.get('logno', 0),
+                        "content_hash": chunk_hash,
+                        "published_at": chunk.get('published_at', ''),
+                        "law_topic": chunk.get('law_topic', ''),
+                        "title": chunk.get('title', ''),
+                        "chunk_index": chunk.get('chunk_index', 0),
+                        "total_chunks": chunk.get('total_chunks', 1),
+                        "created_at": datetime.now().isoformat()
+                    }
+                    new_metadatas.append(metadata)
+                else:
+                    skipped_count += 1
             
-        except Exception as e:
-            logger.error(f"ChromaDB 업서트 오류: {e}")
-            failed_count += len(chunks_to_process)
+            # 새로운 문서들만 업서트
+            if new_chunks:
+                try:
+                    self.collection.upsert(
+                        ids=new_ids,
+                        documents=new_chunks,
+                        embeddings=new_embeddings,
+                        metadatas=new_metadatas
+                    )
+                    added_count += len(new_chunks)
+                    logger.info(f"Upserted {len(new_chunks)} new documents (batch {i//batch_size + 1})")
+                except Exception as e:
+                    logger.error(f"Failed to upsert batch {i//batch_size + 1}: {e}")
+                    raise
         
-        return {
-            "added": added_count,
-            "skipped": skipped_count,
-            "failed": failed_count
-        }
+        logger.info(f"Upsert complete: {added_count} added, {skipped_count} skipped")
+        return {"added": added_count, "skipped": skipped_count}
     
-    def _document_exists(self, content_hash: str) -> bool:
-        """문서 존재 여부 확인"""
-        try:
-            result = self.collection.get(ids=[content_hash])
-            return len(result["ids"]) > 0
-        except Exception:
-            return False
-    
-    def _prepare_metadata(self, chunk: Dict[str, Any]) -> Dict[str, str]:
-        """메타데이터 준비"""
-        metadata = {
-            "content_hash": chunk["content_hash"],
-            "law_topic": chunk.get("metadata", {}).get("law_topic", "채권추심"),
-            "source_url": chunk.get("metadata", {}).get("source_url", ""),
-            "logno": chunk.get("metadata", {}).get("logno", ""),
-            "published_at": chunk.get("metadata", {}).get("published_at", ""),
-            "chunk_id": chunk.get("metadata", {}).get("chunk_id", ""),
-            "chunk_type": chunk.get("metadata", {}).get("chunk_type", "semantic"),
-            "token_count": chunk.get("metadata", {}).get("token_count", "0"),
-            "char_count": chunk.get("metadata", {}).get("char_count", "0")
-        }
-        
-        # 키워드가 있으면 추가
-        if "keywords" in chunk.get("metadata", {}):
-            metadata["keywords"] = chunk["metadata"]["keywords"]
-        
-        return metadata
-    
-    def search(self, query: str, top_k: int = 20, 
+    def search(self, query_embedding: List[float], top_k: int = 20, 
                where_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """벡터 검색"""
+        """
+        임베딩 기반 검색
+        Returns: 검색 결과 리스트
+        """
         try:
-            # 쿼리 임베딩 계산
-            query_embedding = self.embedding_service.get_or_compute_embedding(query)
-            
-            # 검색 실행
             results = self.collection.query(
-                query_embeddings=[query_embedding.tolist()],
+                query_embeddings=[query_embedding],
                 n_results=top_k,
-                where=where_filter
+                where=where_filter,
+                include=['documents', 'metadatas', 'distances']
             )
             
             # 결과 포맷팅
             formatted_results = []
-            if results["ids"] and results["ids"][0]:
-                for i, doc_id in enumerate(results["ids"][0]):
+            if results['documents'] and results['documents'][0]:
+                for i, (doc, metadata, distance) in enumerate(zip(
+                    results['documents'][0],
+                    results['metadatas'][0],
+                    results['distances'][0]
+                )):
                     formatted_results.append({
-                        "id": doc_id,
-                        "text": results["documents"][0][i],
-                        "metadata": results["metadatas"][0][i],
-                        "distance": results["distances"][0][i] if "distances" in results else None
+                        'document': doc,
+                        'metadata': metadata,
+                        'distance': distance,
+                        'score': 1 - distance,  # ChromaDB distance를 score로 변환
+                        'rank': i + 1
                     })
             
-            logger.info(f"벡터 검색 완료: {len(formatted_results)}개 결과")
             return formatted_results
             
         except Exception as e:
-            logger.error(f"벡터 검색 오류: {e}")
+            logger.error(f"Search failed: {e}")
             return []
     
     def get_collection_stats(self) -> Dict[str, Any]:
-        """컬렉션 통계 조회"""
+        """컬렉션 통계 반환"""
         try:
+            # 전체 문서 수
             count = self.collection.count()
             
-            # 샘플 메타데이터 조회
-            sample_results = self.collection.get(limit=10)
-            sample_metadata = sample_results.get("metadatas", [])
+            # 샘플 메타데이터로 통계 생성
+            sample_docs = self.collection.get(limit=1000, include=['metadatas'])
             
-            # 통계 계산
             stats = {
                 "total_documents": count,
                 "collection_name": self.collection_name,
-                "persist_directory": self.persist_directory
+                "last_updated": datetime.now().isoformat()
             }
             
-            if sample_metadata:
-                # 법률 주제별 분포
-                law_topics = {}
-                for meta in sample_metadata:
-                    topic = meta.get("law_topic", "unknown")
-                    law_topics[topic] = law_topics.get(topic, 0) + 1
+            if sample_docs['metadatas']:
+                # 소스별 통계
+                sources = {}
+                topics = {}
+                lognos = []
                 
-                stats["law_topics"] = law_topics
+                for metadata in sample_docs['metadatas']:
+                    source = metadata.get('source_url', 'unknown')
+                    topic = metadata.get('law_topic', 'unknown')
+                    logno = metadata.get('logno', 0)
+                    
+                    sources[source] = sources.get(source, 0) + 1
+                    topics[topic] = topics.get(topic, 0) + 1
+                    if logno > 0:
+                        lognos.append(logno)
                 
-                # 평균 토큰 수
-                token_counts = [int(meta.get("token_count", 0)) for meta in sample_metadata]
-                if token_counts:
-                    stats["avg_token_count"] = sum(token_counts) / len(token_counts)
+                stats.update({
+                    "sources": sources,
+                    "topics": topics,
+                    "logno_range": {
+                        "min": min(lognos) if lognos else 0,
+                        "max": max(lognos) if lognos else 0
+                    }
+                })
             
             return stats
             
         except Exception as e:
-            logger.error(f"통계 조회 오류: {e}")
+            logger.error(f"Failed to get collection stats: {e}")
             return {"error": str(e)}
     
-    def delete_documents(self, content_hashes: List[str]) -> int:
-        """문서 삭제"""
+    def delete_by_filter(self, where_filter: Dict[str, Any]) -> int:
+        """필터 조건에 맞는 문서 삭제"""
         try:
-            self.collection.delete(ids=content_hashes)
-            deleted_count = len(content_hashes)
-            logger.info(f"문서 삭제 완료: {deleted_count}개")
-            return deleted_count
+            # 삭제할 문서 ID 조회
+            results = self.collection.get(where=where_filter, include=['metadatas'])
+            ids_to_delete = results['ids']
+            
+            if ids_to_delete:
+                self.collection.delete(ids=ids_to_delete)
+                logger.info(f"Deleted {len(ids_to_delete)} documents")
+                return len(ids_to_delete)
+            else:
+                logger.info("No documents found matching filter")
+                return 0
+                
         except Exception as e:
-            logger.error(f"문서 삭제 오류: {e}")
+            logger.error(f"Failed to delete documents: {e}")
             return 0
     
-    def clear_collection(self) -> bool:
-        """컬렉션 전체 삭제"""
+    def reset_collection(self):
+        """컬렉션 초기화"""
         try:
-            self.client.delete_collection(self.collection_name)
-            self.collection = self._get_or_create_collection()
-            logger.info(f"컬렉션 초기화 완료: {self.collection_name}")
-            return True
+            self.client.delete_collection(name=self.collection_name)
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={"description": "Legal documents for RAG system"}
+            )
+            logger.info(f"Reset collection: {self.collection_name}")
         except Exception as e:
-            logger.error(f"컬렉션 초기화 오류: {e}")
-            return False
-    
-    def close(self):
-        """리소스 정리"""
-        if self.embedding_service:
-            self.embedding_service.close()
+            logger.error(f"Failed to reset collection: {e}")
+            raise
 
 
-# 편의 함수들
-def get_chroma_index_manager(collection_name: str = "naver_blog_debt_collection",
-                           persist_directory: str = "./src/data/indexes/default/chroma") -> ChromaIndexManager:
-    """ChromaDB 인덱스 매니저 인스턴스 생성"""
-    return ChromaIndexManager(collection_name, persist_directory)
-
-
-def index_chunks(chunks: List[Dict[str, Any]], 
-                collection_name: str = "naver_blog_debt_collection") -> Dict[str, int]:
-    """간편한 청크 인덱싱"""
-    manager = get_chroma_index_manager(collection_name)
-    try:
-        return manager.upsert_chunks(chunks)
-    finally:
-        manager.close()
-
-
-# 테스트용 함수
-def test_chroma_index():
-    """ChromaDB 인덱스 테스트"""
-    # 테스트용 인덱스 매니저 생성
-    manager = ChromaIndexManager(
-        collection_name="test_collection",
-        persist_directory="./test_chroma"
-    )
-    
-    try:
-        # 테스트 청크 생성
-        test_chunks = [
-            {
-                "text": "채권추심 절차는 다음과 같습니다.",
-                "metadata": {
-                    "source_url": "https://test.com/1",
-                    "logno": "12345",
-                    "published_at": "2024-01-15",
-                    "law_topic": "채권추심"
-                }
-            },
-            {
-                "text": "지급명령 신청 방법을 설명합니다.",
-                "metadata": {
-                    "source_url": "https://test.com/2",
-                    "logno": "12346",
-                    "published_at": "2024-01-16",
-                    "law_topic": "채권추심"
-                }
-            }
-        ]
-        
-        # 청크 인덱싱
-        result = manager.upsert_chunks(test_chunks)
-        print(f"✅ 청크 인덱싱 테스트 통과: {result}")
-        
-        # 검색 테스트
-        search_results = manager.search("채권추심 절차", top_k=5)
-        print(f"✅ 검색 테스트 통과: {len(search_results)}개 결과")
-        
-        # 통계 조회
-        stats = manager.get_collection_stats()
-        print(f"✅ 통계 조회 테스트 통과: {stats}")
-        
-        # 중복 인덱싱 테스트 (스킵 확인)
-        result2 = manager.upsert_chunks(test_chunks)
-        print(f"✅ 중복 인덱싱 테스트 통과: {result2}")
-        
-    finally:
-        manager.close()
-        # 테스트 파일 정리
-        import shutil
-        if os.path.exists("./test_chroma"):
-            shutil.rmtree("./test_chroma")
-    
-    print("✅ ChromaIndexManager 테스트 완료")
-
-
-if __name__ == "__main__":
-    test_chroma_index()
+# 전역 인스턴스
+chroma_indexer = ChromaIndexer()

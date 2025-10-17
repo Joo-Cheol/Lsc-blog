@@ -125,9 +125,9 @@ export default function HomePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/health">
+              <Link href="/dashboard">
                 <Button variant="outline" className="w-full">
-                  상태 확인
+                  대시보드 보기
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>

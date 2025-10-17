@@ -38,6 +38,10 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 생명주기 관리"""
+    # 시작 시간 기록
+    import time
+    app.state.start_time = time.time()
+    
     # 시작 시 실행
     logger.info("애플리케이션 시작", extra={
         "extra_fields": {
@@ -54,6 +58,7 @@ async def lifespan(app: FastAPI):
         os.makedirs("src/data/meta", exist_ok=True)
         os.makedirs("src/data/processed", exist_ok=True)
         os.makedirs("src/data/indexes", exist_ok=True)
+        os.makedirs("data", exist_ok=True)
         
         logger.info("초기화 완료")
         
@@ -158,12 +163,50 @@ async def health_check():
     except Exception as e:
         db_status = {"status": "error", "error": str(e)}
     
+    # ChromaDB 상태 확인
+    chroma_status = {"status": "unknown"}
+    try:
+        from src.vector.chroma_index import chroma_indexer
+        stats = chroma_indexer.get_collection_stats()
+        if "error" not in stats:
+            chroma_status = {
+                "status": "healthy",
+                "total_documents": stats.get("total_documents", 0),
+                "collection_name": stats.get("collection_name", "unknown")
+            }
+        else:
+            chroma_status = {"status": "error", "error": stats["error"]}
+    except Exception as e:
+        chroma_status = {"status": "error", "error": str(e)}
+    
+    # 임베딩 캐시 상태 확인
+    cache_status = {"status": "unknown"}
+    try:
+        from src.vector.embedder import embedding_cache
+        cache_stats = embedding_cache.get_cache_stats()
+        cache_status = {
+            "status": "healthy",
+            "total_embeddings": cache_stats.get("total_embeddings", 0),
+            "hit_rate": "N/A"  # 실제 hit rate는 별도 계산 필요
+        }
+    except Exception as e:
+        cache_status = {"status": "error", "error": str(e)}
+    
+    # 전체 상태 결정
+    overall_status = "healthy"
+    if (provider_health["overall_status"] != "healthy" or 
+        db_status["status"] not in ["healthy", "not_initialized"] or
+        chroma_status["status"] == "error"):
+        overall_status = "degraded"
+    
     return HealthResponse(
-        status="healthy" if provider_health["overall_status"] == "healthy" else "degraded",
+        status=overall_status,
         timestamp=datetime.now(),
         version=settings.app_version,
         providers=provider_health["providers"],
         database=db_status,
+        chroma=chroma_status,
+        embedding_cache=cache_status,
         uptime_seconds=int(time.time() - app.state.start_time) if hasattr(app.state, 'start_time') else 0
     )
 
@@ -172,25 +215,66 @@ async def health_check():
 async def get_stats():
     """통계 정보 조회"""
     try:
-        # 기본 통계 (실제 구현에서는 데이터베이스에서 조회)
-        stats = {
-            "total_posts": 0,
-            "total_chunks": 0,
-            "total_searches": 0,
-            "total_generations": 0,
-            "last_crawl": None,
-            "last_index": None,
-            "provider_stats": {}
-        }
+        # 크롤러 통계
+        crawler_stats = {"total_posts": 0, "last_crawl": None}
+        try:
+            from src.crawler.storage import crawler_storage
+            crawler_stats = crawler_storage.get_crawl_stats()
+        except Exception as e:
+            logger.error(f"크롤러 통계 조회 실패: {e}")
+        
+        # ChromaDB 통계
+        chroma_stats = {"total_documents": 0, "last_index": None}
+        try:
+            from src.vector.chroma_index import chroma_indexer
+            chroma_data = chroma_indexer.get_collection_stats()
+            chroma_stats = {
+                "total_documents": chroma_data.get("total_documents", 0),
+                "last_updated": chroma_data.get("last_updated", None),
+                "sources": chroma_data.get("sources", {}),
+                "topics": chroma_data.get("topics", {})
+            }
+        except Exception as e:
+            logger.error(f"ChromaDB 통계 조회 실패: {e}")
+        
+        # 임베딩 캐시 통계
+        cache_stats = {"total_embeddings": 0, "hit_rate": "N/A"}
+        try:
+            from src.vector.embedder import embedding_cache
+            cache_data = embedding_cache.get_cache_stats()
+            cache_stats = {
+                "total_embeddings": cache_data.get("total_embeddings", 0),
+                "total_accesses": cache_data.get("total_accesses", 0),
+                "avg_accesses": cache_data.get("avg_accesses", 0),
+                "accessed_today": cache_data.get("accessed_today", 0),
+                "accessed_week": cache_data.get("accessed_week", 0)
+            }
+        except Exception as e:
+            logger.error(f"임베딩 캐시 통계 조회 실패: {e}")
         
         # Provider 통계
+        provider_stats = {}
         try:
             from src.llm.provider_manager import get_provider_manager
             manager = get_provider_manager()
             providers = manager.list_providers()
-            stats["provider_stats"] = providers
+            provider_stats = providers
         except Exception as e:
             logger.error(f"Provider 통계 조회 실패: {e}")
+        
+        # 통합 통계
+        stats = {
+            "total_posts": crawler_stats.get("total_posts", 0),
+            "total_chunks": chroma_stats.get("total_documents", 0),
+            "total_searches": 0,  # TODO: 검색 통계 추가
+            "total_generations": 0,  # TODO: 생성 통계 추가
+            "last_crawl": crawler_stats.get("last_crawl", None),
+            "last_index": chroma_stats.get("last_updated", None),
+            "provider_stats": provider_stats,
+            "crawler_stats": crawler_stats,
+            "chroma_stats": chroma_stats,
+            "cache_stats": cache_stats
+        }
         
         return StatsResponse(success=True, **stats)
         
@@ -226,10 +310,6 @@ async def get_config():
 
 if __name__ == "__main__":
     import uvicorn
-    
-    # 시작 시간 기록
-    import time
-    app.state.start_time = time.time()
     
     uvicorn.run(
         "api.main:app",
