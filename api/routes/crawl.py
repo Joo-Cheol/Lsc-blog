@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 from api.schemas import CrawlRequest, CrawlResponse
 from api.core.logging import get_logger, log_business_event
 from api.core.config import get_settings
+from src.crawler.extractors import parse_blog_id
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -30,7 +31,9 @@ async def crawl_blog(request: CrawlRequest):
     run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     try:
-        logger.info(f"크롤링 시작: {request.blog_id}, 카테고리 {request.category_no}")
+        # 블로그 URL에서 blog_id 추출
+        blog_id = parse_blog_id(str(request.blog_url))
+        logger.info(f"크롤링 시작: {blog_id}, 카테고리 {request.category_no}")
         
         # 크롤러 초기화
         from src.crawler.naver_crawler import NaverBlogCrawler
@@ -40,12 +43,11 @@ async def crawl_blog(request: CrawlRequest):
         
         # 크롤러 생성
         crawler = NaverBlogCrawler(
-            blog_id=request.blog_id,
+            blog_id=blog_id,
             category_no=request.category_no,
-            db_path=db_path,
-            headless=True,
-            crawl_delay_min=settings.crawl_delay_min,
-            crawl_delay_max=settings.crawl_delay_max
+            seen_db_path=db_path,
+            delay_min_ms=settings.crawl_delay_min,
+            delay_max_ms=settings.crawl_delay_max
         )
         
         # 크롤링 실행

@@ -3,7 +3,7 @@
 """
 FastAPI 스키마 정의
 """
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, HttpUrl
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
@@ -17,20 +17,20 @@ class ProviderType(str, Enum):
 
 class CrawlRequest(BaseModel):
     """크롤링 요청 스키마"""
-    blog_id: str = Field(..., description="네이버 블로그 ID")
-    category_no: int = Field(..., description="카테고리 번호")
-    max_pages: Optional[int] = Field(1, description="최대 페이지 수", ge=1, le=10)
-    
-    @validator('blog_id')
-    def validate_blog_id(cls, v):
-        if not v or len(v.strip()) == 0:
-            raise ValueError('blog_id는 비어있을 수 없습니다')
-        return v.strip()
+    blog_url: HttpUrl = Field(..., description="네이버 블로그 URL")
+    category_no: Optional[int] = Field(None, description="카테고리 번호 (미지정 시 전체)")
+    max_pages: Optional[int] = Field(None, description="최대 페이지 수 (미지정 시 끝까지)")
     
     @validator('category_no')
     def validate_category_no(cls, v):
-        if v < 0:
+        if v is not None and v < 0:
             raise ValueError('category_no는 0 이상이어야 합니다')
+        return v
+    
+    @validator('max_pages')
+    def validate_max_pages(cls, v):
+        if v is not None and (v < 1 or v > 50):
+            raise ValueError('max_pages는 1 이상 50 이하여야 합니다')
         return v
 
 

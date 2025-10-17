@@ -197,3 +197,7 @@ class CrawlerStorage:
 
 # 전역 인스턴스
 crawler_storage = CrawlerStorage()
+
+# backward-compat alias
+SeenStorage = CrawlerStorage
+__all__ = ["CrawlerStorage", "SeenStorage", "get_content_hash"]

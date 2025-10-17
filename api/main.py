@@ -12,6 +12,7 @@ project_root = Path(__file__).parent.parent
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from contextlib import asynccontextmanager
 from .core.config import get_settings, validate_settings
 from .core.logging import get_logger, setup_logging
@@ -92,12 +93,17 @@ async def http_exception_handler(request, exc: HTTPException):
     """HTTP 예외 처리"""
     logger.warning(f"HTTP 예외: {exc.status_code} - {exc.detail}")
     
+    payload = {
+        "error": exc.detail,
+        "error_code": f"HTTP_{exc.status_code}",
+        "timestamp": datetime.utcnow(),
+        "path": str(request.url.path),
+        "run_id": getattr(request.state, "run_id", None)
+    }
+    
     return JSONResponse(
         status_code=exc.status_code,
-        content=ErrorResponse(
-            error=exc.detail,
-            error_code=f"HTTP_{exc.status_code}"
-        ).dict()
+        content=jsonable_encoder(payload)
     )
 
 
@@ -106,12 +112,17 @@ async def general_exception_handler(request, exc: Exception):
     """일반 예외 처리"""
     logger.error(f"예상치 못한 오류: {str(exc)}", exc_info=True)
     
+    payload = {
+        "error": "내부 서버 오류가 발생했습니다",
+        "error_code": "INTERNAL_SERVER_ERROR",
+        "timestamp": datetime.utcnow(),
+        "path": str(request.url.path),
+        "run_id": getattr(request.state, "run_id", None)
+    }
+    
     return JSONResponse(
         status_code=500,
-        content=ErrorResponse(
-            error="내부 서버 오류가 발생했습니다",
-            error_code="INTERNAL_SERVER_ERROR"
-        ).dict()
+        content=jsonable_encoder(payload)
     )
 
 
