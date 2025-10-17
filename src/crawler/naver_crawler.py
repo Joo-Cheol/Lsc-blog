@@ -199,6 +199,7 @@ class NaverBlogCrawler:
                 'failed': 0,
                 'pages_processed': 0,
                 'collected_posts': [],  # 수집된 글 목록 추가
+                'categories_processed': 1,  # 현재 카테고리 처리됨
                 'category_start_time': time.time()
             }
             
@@ -315,10 +316,11 @@ class NaverBlogCrawler:
             logger.info(f"[{run_id}] 카테고리 {category_no} 통계 누적 전 - stats: {stats}")
             
             for key in total_stats:
-                if key == 'collected_posts':
-                    total_stats[key].extend(stats[key])
-                else:
-                    total_stats[key] += stats[key]
+                if key in stats:
+                    if key == 'collected_posts':
+                        total_stats[key].extend(stats[key])
+                    else:
+                        total_stats[key] += stats[key]
             
             logger.info(f"[{run_id}] 카테고리 {category_no} 통계 누적 후 - total_stats: {total_stats}")
             logger.info(f"[{run_id}] 카테고리 {category_no} 완료 - {stats}")
