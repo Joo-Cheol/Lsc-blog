@@ -46,17 +46,16 @@ async def generate_content(request: GenerateRequest):
         if request.with_rag:
             from src.search.search_service import SearchService
             from src.vector.simple_index import SimpleVectorIndex
-            from src.vector.embedder import EmbeddingService
+            from src.vector.embedder import EmbeddingCache
             from src.vector.reranker import CrossEncoderReranker
             
-            embedder = EmbeddingService(
-                model_name=settings.embed_model,
-                device=settings.embed_device
+            embedder = EmbeddingCache(
+                model_name=settings.embed_model
             )
             
             index = SimpleVectorIndex(
-                index_path=settings.chroma_dir,
-                embedder=embedder
+                persist_directory=settings.chroma_dir,
+                embedding_service=embedder
             )
             
             reranker = CrossEncoderReranker(
@@ -64,17 +63,18 @@ async def generate_content(request: GenerateRequest):
             )
             
             search_service = SearchService(
-                vector_index=index,
-                reranker=reranker,
+                index_name="naver_blog_debt_collection",
+                index_directory=settings.chroma_dir,
                 top_k_first=settings.topk_first,
                 top_k_final=settings.topk_final
             )
             
             # 컨텍스트 문서 검색
-            context_docs = search_service.search_with_rerank(
+            context_docs = search_service.search(
                 query=request.query,
                 top_k=3,
-                law_topic="채권추심"
+                law_topic="채권추심",
+                use_rerank=True
             )
         
         # 품질 가드 초기화

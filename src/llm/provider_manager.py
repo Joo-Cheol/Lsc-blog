@@ -24,7 +24,7 @@ class ProviderManager:
     def _register_default_providers(self):
         """기본 Provider 등록"""
         # 환경 변수에서 기본 Provider 확인
-        default_provider = os.getenv('LLM_PROVIDER', 'ollama').lower()
+        default_provider = os.getenv('LLM_PROVIDER', 'gemini').lower()
         
         try:
             if default_provider == 'gemini':

@@ -6,11 +6,11 @@ import random
 from src.config.settings import settings
 
 class GeminiClient:
-    def __init__(self):
+    def __init__(self, model_name: str = None):
         if not settings.GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY is missing (.env에 설정 필요)")
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        self._model_name = settings.GEMINI_MODEL or "gemini-1.5-pro"
+        self._model_name = model_name or settings.GEMINI_MODEL or "gemini-1.5-pro"
 
     def chat(self, system: str, messages: List[Dict[str, str]], **kwargs) -> str:
         """
@@ -85,3 +85,8 @@ class GeminiClient:
                     continue
                 else:
                     raise RuntimeError(f"Gemini call failed: {e}") from e
+
+    def generate_text(self, prompt: str, max_tokens: int = 1024, temperature: float = 0.7, **kwargs) -> str:
+        """단일 프롬프트로 텍스트 생성"""
+        messages = [{"role": "user", "content": prompt}]
+        return self.chat("", messages, max_tokens=max_tokens, temperature=temperature, **kwargs)

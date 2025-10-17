@@ -47,22 +47,29 @@ export default function GenerateForm() {
     setResult(null);
 
     try {
+      const requestBody = {
+        query: query.trim(),
+        with_rag: withRag,
+        provider: provider || undefined,
+        max_tokens: maxTokens,
+        temperature: temperature,
+        max_retries: maxRetries
+      };
+      
+      console.log('생성 요청 전송:', requestBody);
+      
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          query: query.trim(),
-          with_rag: withRag,
-          provider: provider || undefined,
-          max_tokens: maxTokens,
-          temperature: temperature,
-          max_retries: maxRetries
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      console.log('응답 상태:', response.status, response.statusText);
+
       const data = await response.json();
+      console.log('응답 데이터:', data);
 
       if (!response.ok) {
         throw new Error(data.error || '생성 요청 실패');
@@ -70,6 +77,7 @@ export default function GenerateForm() {
 
       setResult(data);
     } catch (err) {
+      console.error('생성 오류:', err);
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다');
     } finally {
       setIsLoading(false);

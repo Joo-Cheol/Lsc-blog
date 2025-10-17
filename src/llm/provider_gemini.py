@@ -76,9 +76,8 @@ class GeminiProvider(LLMProvider):
     def is_available(self) -> bool:
         """Provider 사용 가능 여부 확인"""
         try:
-            # 간단한 테스트 요청
-            test_response = self.generate("Hello", max_tokens=10)
-            return len(test_response.content) > 0
+            # API 키와 클라이언트가 존재하는지만 확인
+            return hasattr(self, 'client') and self.client is not None
         except Exception as e:
             logger.warning(f"Gemini 가용성 확인 실패: {e}")
             return False

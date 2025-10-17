@@ -18,6 +18,7 @@ from datetime import datetime
 from .core.config import get_settings, validate_settings
 from .core.logging import get_logger, setup_logging
 from .core.middleware import setup_middleware
+from monitoring.job_metrics import job_metrics
 from .routes import crawl, index, search, generate, upload
 from .schemas import HealthResponse, ErrorResponse, StatsResponse, ConfigResponse
 
@@ -309,6 +310,13 @@ async def get_stats():
         except Exception as e:
             logger.error(f"운영 메트릭 조회 실패: {e}")
         
+        # Job 시스템 메트릭
+        job_metrics_data = {}
+        try:
+            job_metrics_data = job_metrics.get_dashboard_metrics()
+        except Exception as e:
+            logger.error(f"Job 메트릭 조회 실패: {e}")
+        
         # 통합 통계
         stats = {
             "total_posts": crawler_stats.get("total_posts", 0),
@@ -323,7 +331,8 @@ async def get_stats():
             "crawler_stats": crawler_stats,
             "chroma_stats": chroma_stats,
             "cache_stats": cache_stats,
-            "operation_metrics": op_metrics
+            "operation_metrics": op_metrics,
+            "job_metrics": job_metrics_data
         }
         
         return StatsResponse(success=True, **stats)

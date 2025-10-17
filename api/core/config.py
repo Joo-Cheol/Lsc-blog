@@ -44,11 +44,11 @@ class Settings(BaseModel):
     topk_final: int = Field(default=6)
     
     # LLM Provider 설정
-    llm_provider: str = Field(default="ollama")
+    llm_provider: str = Field(default="gemini")
     ollama_endpoint: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="qwen2.5:7b-instruct")
-    gemini_api_key: Optional[str] = Field(default=None)
-    gemini_model: str = Field(default="gemini-2.5-flash")
+    gemini_api_key: Optional[str] = Field(default="AIzaSyCBboszWE6B_llcWYKtEXQJtMIET8tuDR8")
+    gemini_model: str = Field(default="gemini-2.0-flash-exp")
     
     # 생성 품질 가드 설정
     gen_min_chars: int = Field(default=1600)
@@ -98,11 +98,11 @@ class Settings(BaseModel):
             rerank_model=os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
             topk_first=int(os.getenv("TOPK_FIRST", "20")),
             topk_final=int(os.getenv("TOPK_FINAL", "6")),
-            llm_provider=os.getenv("LLM_PROVIDER", "ollama"),
+            llm_provider=os.getenv("LLM_PROVIDER", "gemini"),
             ollama_endpoint=os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434"),
             ollama_model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct"),
             gemini_api_key=os.getenv("GEMINI_API_KEY"),
-            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp"),
             gen_min_chars=int(os.getenv("GEN_MIN_CHARS", "1600")),
             gen_max_chars=int(os.getenv("GEN_MAX_CHARS", "1900")),
             gen_min_subheadings=int(os.getenv("GEN_MIN_SUBHEADINGS", "3")),

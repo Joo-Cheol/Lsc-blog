@@ -10,9 +10,9 @@ import numpy as np
 import logging
 from typing import List, Dict, Optional, Tuple, Any
 try:
-    from .embedder import EmbeddingService
+    from .embedder import EmbeddingCache
 except ImportError:
-    from embedder import EmbeddingService
+    from embedder import EmbeddingCache
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -25,10 +25,10 @@ class SimpleVectorIndex:
     def __init__(self, 
                  index_name: str = "naver_blog_debt_collection",
                  persist_directory: str = "./src/data/indexes/default/simple",
-                 embedding_service: Optional[EmbeddingService] = None):
+                 embedding_service: Optional[EmbeddingCache] = None):
         self.index_name = index_name
         self.persist_directory = persist_directory
-        self.embedding_service = embedding_service or EmbeddingService()
+        self.embedding_service = embedding_service or EmbeddingCache()
         
         # 인덱스 파일 경로
         self.index_file = os.path.join(persist_directory, f"{index_name}.pkl")
@@ -140,7 +140,7 @@ class SimpleVectorIndex:
         
         # 임베딩 계산
         texts = [chunk["text"] for chunk in chunks_to_process]
-        embeddings = self.embedding_service.get_embeddings_batch(texts)
+        embeddings, _ = self.embedding_service.batch_get_or_compute(texts)
         
         # 문서 추가
         for i, chunk in enumerate(chunks_to_process):
@@ -196,7 +196,7 @@ class SimpleVectorIndex:
                 return []
             
             # 쿼리 임베딩 계산
-            query_embedding = self.embedding_service.get_or_compute_embedding(query)
+            query_embedding, _ = self.embedding_service.get_or_compute(query)
             
             # 코사인 유사도 계산
             similarities = np.dot(self.embeddings_matrix, query_embedding) / (
