@@ -286,7 +286,7 @@ async def get_stats():
             from api.core.middleware import RequestLoggingMiddleware
             # 미들웨어 인스턴스에서 카운터 가져오기
             for middleware in app.user_middleware:
-                if isinstance(middleware.cls, RequestLoggingMiddleware):
+                if middleware.cls is RequestLoggingMiddleware:
                     if hasattr(middleware.cls, '_op_metrics'):
                         op_metrics = middleware.cls._op_metrics
                     break
