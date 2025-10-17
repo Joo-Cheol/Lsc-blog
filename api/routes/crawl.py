@@ -56,8 +56,11 @@ async def crawl_blog(request: CrawlRequest):
             delay_max_ms=settings.crawl_delay_max
         )
         
-        # 크롤링 실행
-        results = crawler.crawl(max_pages=request.max_pages)
+        # 크롤링 실행 (crawl → crawl_incremental)
+        results = crawler.crawl_incremental(
+            max_pages=request.max_pages or 5, 
+            run_id=run_id
+        )
         
         # 실행 시간 계산
         duration_ms = int((time.time() - start_time) * 1000)
@@ -77,15 +80,20 @@ async def crawl_blog(request: CrawlRequest):
         
         logger.info(f"크롤링 완료: {results}")
         
+        # results dict를 라우트의 응답 스키마에 맞게 맵핑
+        crawled = results.get("new_posts", 0) + results.get("duplicate_content", 0)
+        skipped = results.get("duplicate_content", 0)
+        failed = results.get("failed", 0)
+        
         return CrawlResponse(
             success=True,
             run_id=run_id,
-            crawled_count=results["crawled_count"],
-            skipped_count=results["skipped_count"],
-            failed_count=results["failed_count"],
+            crawled_count=crawled,
+            skipped_count=skipped,
+            failed_count=failed,
             last_logno_updated=results.get("last_logno_updated"),
             duration_ms=duration_ms,
-            message=f"크롤링이 성공적으로 완료되었습니다. {results['crawled_count']}개 포스트를 수집했습니다.",
+            message=f"크롤링이 성공적으로 완료되었습니다. {crawled}개 포스트를 수집했습니다.",
             blog_id=blog_id
         )
         

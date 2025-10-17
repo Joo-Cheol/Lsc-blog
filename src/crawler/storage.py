@@ -198,6 +198,27 @@ class CrawlerStorage:
 # 전역 인스턴스
 crawler_storage = CrawlerStorage()
 
+# 과거 코드 호환을 위한 모듈 레벨 해시 함수
+import hashlib
+
+def get_content_hash(content: str) -> str:
+    """과거 코드 호환을 위한 모듈 레벨 해시 함수"""
+    return hashlib.sha256(content.encode('utf-8')).hexdigest()
+
+# 과거 메서드명 호환 어댑터
+def _alias_methods_for_compat():
+    def set_last_logno(self, last_logno: int):
+        return self.update_checkpoint(last_logno, {'total': 0, 'new': 0, 'updated': 0})
+    def is_new_post(self, url: str) -> bool:
+        return not self.is_post_seen(url)
+    def add_post(self, url: str, logno: int, content: str, title: str = None) -> bool:
+        return self.add_seen_post(url, logno, content, title=title) == "new"
+    CrawlerStorage.set_last_logno = set_last_logno
+    CrawlerStorage.is_new_post = is_new_post
+    CrawlerStorage.add_post = add_post
+
+_alias_methods_for_compat()
+
 # backward-compat alias
 SeenStorage = CrawlerStorage
 __all__ = ["CrawlerStorage", "SeenStorage", "get_content_hash"]

@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from typing import List, Dict, Optional, Generator
 import logging
-from .storage import SeenStorage, get_content_hash
+from .storage import SeenStorage
 from .extractors import extract_post_metadata, extract_post_content
 
 
@@ -39,7 +39,10 @@ class NaverBlogCrawler:
     
     def _get_blog_list_url(self, page: int = 1) -> str:
         """블로그 목록 URL 생성"""
-        return f"https://blog.naver.com/PostList.naver?blogId={self.blog_id}&categoryNo={self.category_no}&currentPage={page}"
+        return (
+            f"https://blog.naver.com/PostList.naver?"
+            f"blogId={self.blog_id}&categoryNo={self.category_no}&currentPage={page}"
+        )
     
     def _get_post_url(self, logno: str) -> str:
         """포스트 URL 생성"""
@@ -149,8 +152,8 @@ class NaverBlogCrawler:
             for post in posts:
                 self._random_delay()
                 
-                # 이미 수집된 URL인지 확인
-                if not self.storage.is_new_post(post['url']):
+                # 이미 본 URL은 스킵 (이전 이름 is_new_post → 실제 구현에 맞게)
+                if self.storage.is_post_seen(post['url']):
                     logger.debug(f"[{run_id}] 이미 수집된 포스트 스킵: {post['url']}")
                     continue
                 
@@ -160,31 +163,39 @@ class NaverBlogCrawler:
                     stats['failed'] += 1
                     continue
                 
-                # 중복 내용 체크 및 저장
-                content_hash = get_content_hash(post_data['content'])
-                is_new_content = self.storage.add_post(
+                # 중복 콘텐츠 판단 및 저장 (add_seen_post가 'new/updated/unchanged' 반환)
+                status = self.storage.add_seen_post(
                     post['url'], 
-                    post['logno'], 
-                    post_data['content']
+                    int(post['logno']), 
+                    post_data['content'], 
+                    title=post['title']
                 )
                 
-                if is_new_content:
+                if status == "new":
                     stats['new_posts'] += 1
                     logger.info(f"[{run_id}] 새 포스트 추가: {post['title'][:50]}...")
-                else:
+                elif status == "unchanged":
                     stats['duplicate_content'] += 1
                     logger.info(f"[{run_id}] 중복 내용 스킵: {post['title'][:50]}...")
+                else:
+                    # updated
+                    stats['new_posts'] += 1
+                    logger.info(f"[{run_id}] 포스트 업데이트: {post['title'][:50]}...")
             
             # 페이지 간 딜레이
             if page < max_pages:
                 self._random_delay()
         
-        # 마지막 logno 업데이트
+        # 마지막 logno 갱신 (set_last_logno → update_checkpoint)
         if stats['total_found'] > 0:
             latest_posts = self.fetch_post_list(1)
             if latest_posts:
-                latest_logno = max(p['logno'] for p in latest_posts)
-                self.storage.set_last_logno(latest_logno)
+                latest_logno = max(int(p['logno']) for p in latest_posts)
+                self.storage.update_checkpoint(latest_logno, {
+                    'total': stats['total_found'],
+                    'new': stats['new_posts'],
+                    'updated': stats['duplicate_content'],
+                })
                 logger.info(f"[{run_id}] 마지막 logno 업데이트: {latest_logno}")
         
         logger.info(f"[{run_id}] 크롤링 완료 - {stats}")

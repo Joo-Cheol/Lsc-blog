@@ -19,6 +19,10 @@ logger = get_logger(__name__)
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """요청 로깅 미들웨어"""
     
+    # 클래스 변수로 변경 (메인에서 클래스 속성으로 읽기 위해)
+    _op_metrics = {"search": 0, "generate": 0, "crawl": 0, "upload": 0}
+    _lock = threading.Lock()
+    
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # 요청 시작 시간
         start_time = time.time()
@@ -105,25 +109,17 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     
     def _increment_operation_counter(self, path: str):
         """운영 메트릭 카운터 증가"""
-        # 전역 카운터 사용 (간단한 구현)
         try:
-            import threading
-            if not hasattr(self, '_lock'):
-                self._lock = threading.Lock()
-            
             with self._lock:
-                if not hasattr(self, '_op_metrics'):
-                    self._op_metrics = {"search": 0, "generate": 0, "crawl": 0, "upload": 0}
-                
-                # 경로별 카운터 증가
+                # 경로별 카운터 증가 (클래스 변수 사용)
                 if "/search" in path:
-                    self._op_metrics["search"] += 1
+                    type(self)._op_metrics["search"] += 1
                 elif "/generate" in path:
-                    self._op_metrics["generate"] += 1
+                    type(self)._op_metrics["generate"] += 1
                 elif "/crawl" in path:
-                    self._op_metrics["crawl"] += 1
+                    type(self)._op_metrics["crawl"] += 1
                 elif "/upload" in path:
-                    self._op_metrics["upload"] += 1
+                    type(self)._op_metrics["upload"] += 1
         except Exception:
             # 메트릭 수집 실패 시 무시
             pass
