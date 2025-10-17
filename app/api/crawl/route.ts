@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorData = await response.json();
       return NextResponse.json(
-        { success: false, error: errorData.error || errorData.detail || '크롤링 요청 실패' },
+        { ok: false, error: errorData.error || errorData.detail || '크롤링 요청 실패' },
         { status: response.status }
       );
     }
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('크롤링 API 오류:', error);
     return NextResponse.json(
-      { success: false, error: '서버 오류가 발생했습니다' },
+      { ok: false, error: '서버 오류가 발생했습니다' },
       { status: 500 }
     );
   }

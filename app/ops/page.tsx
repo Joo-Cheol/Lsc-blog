@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Loader2
 } from "lucide-react";
+import { useJob } from "@/components/useJob";
+import JobResultPosts from "@/components/JobResultPosts";
 
 export default function OpsPage() {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -28,13 +30,24 @@ export default function OpsPage() {
   });
   const [confirmInput, setConfirmInput] = useState("");
   const [pipelineStatus, setPipelineStatus] = useState<Record<string, any>>({});
+  const [activeJobId, setActiveJobId] = useState<string>();
+  const { job: activeJob, events: activeEvents } = useJob(activeJobId);
 
   const handleOperation = async (operation: string, payload?: any) => {
     setLoading(prev => ({ ...prev, [operation]: true }));
     setErrors(prev => ({ ...prev, [operation]: "" }));
     
     try {
-      const response = await fetch(`/api/v1/${operation}`, {
+      let apiEndpoint = `/api/v1/${operation}`;
+      
+      // 특정 작업에 대한 API 엔드포인트 매핑
+      if (operation === "pipeline/run") {
+        apiEndpoint = "/api/pipeline/run";
+      } else if (operation === "pipeline/preprocess-embed") {
+        apiEndpoint = "/api/pipeline/preprocess-embed";
+      }
+      
+      const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload || {})
@@ -46,11 +59,12 @@ export default function OpsPage() {
         throw new Error(data.error || data.detail || "작업 실패");
       }
       
-      setResults(prev => ({ ...prev, [operation]: data }));
-      
-      // 파이프라인 작업인 경우 상태 폴링 시작
-      if (data.task_id && (operation.includes("pipeline") || data.task === "preprocess_embed")) {
-        pollPipelineStatus(data.task_id, operation);
+      // Job 기반 응답 처리
+      if (data.job_id) {
+        setActiveJobId(data.job_id);
+        setResults(prev => ({ ...prev, [operation]: data }));
+      } else {
+        setResults(prev => ({ ...prev, [operation]: data }));
       }
     } catch (error) {
       setErrors(prev => ({ 
@@ -62,30 +76,8 @@ export default function OpsPage() {
     }
   };
 
-  const pollPipelineStatus = async (taskId: string, operation: string) => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/pipeline/status?id=${taskId}`);
-        const status = await response.json();
-        
-        setPipelineStatus(prev => ({ ...prev, [operation]: status }));
-        
-        if (status.status === "completed" || status.status === "failed") {
-          clearInterval(pollInterval);
-          setLoading(prev => ({ ...prev, [operation]: false }));
-          
-          if (status.status === "completed") {
-            setResults(prev => ({ ...prev, [operation]: status }));
-          } else {
-            setErrors(prev => ({ ...prev, [operation]: status.error || "파이프라인 실패" }));
-          }
-        }
-      } catch (error) {
-        console.error("상태 폴링 실패:", error);
-        clearInterval(pollInterval);
-        setLoading(prev => ({ ...prev, [operation]: false }));
-      }
-    }, 1000); // 1초마다 폴링
+  const closeJobModal = () => {
+    setActiveJobId(undefined);
   };
 
   const handleDangerousOperation = (task: string, dangerWord: string) => {
@@ -566,6 +558,107 @@ export default function OpsPage() {
           실행 전 반드시 백업을 수행하세요.
         </AlertDescription>
       </Alert>
+
+      {/* Job 진행 모달 */}
+      {activeJob && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>작업 진행 상황</span>
+                <Button variant="outline" size="sm" onClick={closeJobModal}>
+                  닫기
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 작업 상태 */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">상태:</span>
+                <span className={`px-2 py-1 rounded text-xs ${
+                  activeJob.status === "running" ? "bg-blue-100 text-blue-800" :
+                  activeJob.status === "succeeded" ? "bg-green-100 text-green-800" :
+                  activeJob.status === "failed" ? "bg-red-100 text-red-800" :
+                  "bg-gray-100 text-gray-800"
+                }`}>
+                  {activeJob.status}
+                </span>
+              </div>
+
+              {/* 진행률 */}
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>진행률</span>
+                  <span>{Math.round((activeJob.progress || 0) * 100)}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((activeJob.progress || 0) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* 카운터 */}
+              {activeJob.counters && (
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {Object.entries(activeJob.counters).map(([key, value]) => (
+                    <div key={key} className="flex justify-between">
+                      <span className="capitalize">{key}:</span>
+                      <span className="font-medium">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 결과 표시 */}
+              {activeJob.results?.posts && (
+                <JobResultPosts posts={activeJob.results.posts} />
+              )}
+
+              {activeJob.results?.chunks_created && (
+                <div className="space-y-2">
+                  <h4 className="font-medium">처리 결과</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>청크: {activeJob.results.chunks_created}개</div>
+                    <div>임베딩: {activeJob.results.embeddings_added}개</div>
+                    <div>컬렉션: {activeJob.results.collection_name}</div>
+                    <div>총 항목: {activeJob.results.total_items}개</div>
+                  </div>
+                </div>
+              )}
+
+              {/* 에러 표시 */}
+              {activeJob.errors && activeJob.errors.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-1">
+                      {activeJob.errors.map((error, index) => (
+                        <p key={index} className="text-sm">{error}</p>
+                      ))}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* 최근 이벤트 로그 */}
+              {activeEvents.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">최근 활동</h4>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {activeEvents.slice(-10).map((event, index) => (
+                      <div key={index} className="text-xs text-gray-600">
+                        <span className="font-medium">{event.type}:</span> {event.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

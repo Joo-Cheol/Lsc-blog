@@ -148,7 +148,8 @@ class NaverBlogCrawler:
             logger.error(f"포스트 내용 조회 실패 {url}: {e}")
             return None
     
-    def crawl_incremental(self, max_pages: int = 5, run_id: str = None) -> Dict[str, int]:
+    def crawl_incremental(self, max_pages: int = 5, run_id: str = None, 
+                         on_page: callable = None, on_new: callable = None, on_skip: callable = None) -> Dict[str, int]:
         """증분 크롤링 실행"""
         if not run_id:
             run_id = f"crawl_{int(time.time())}"
@@ -185,13 +186,17 @@ class NaverBlogCrawler:
             for page in range(1, max_pages + 1):
                 logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page} 처리 중...")
                 
+                # 페이지 콜백 호출
+                if on_page:
+                    on_page(category_no, page)
+                
                 posts = self.fetch_post_list(page, category_no)
                 if not posts:
                     logger.info(f"[{run_id}] 카테고리 {category_no}, 페이지 {page}에서 포스트 없음")
                     break
             
-            stats['total_found'] += len(posts)
-            stats['pages_processed'] = page
+                stats['total_found'] += len(posts)
+                stats['pages_processed'] = page
             
             # logno 기준으로 필터링 (증분 수집) - 안전한 타입 비교
             if last_logno:
@@ -225,31 +230,40 @@ class NaverBlogCrawler:
                 
                 if status == "new":
                     stats['new_posts'] += 1
-                    stats['collected_posts'].append({
+                    post_info = {
                         'title': post['title'],
                         'url': post['url'],
                         'logno': post['logno'],
                         'status': 'new'
-                    })
+                    }
+                    stats['collected_posts'].append(post_info)
+                    if on_new:
+                        on_new(post_info)
                     logger.info(f"[{run_id}] 새 포스트 추가: {post['title'][:50]}...")
                 elif status == "unchanged":
                     stats['duplicate_content'] += 1
-                    stats['collected_posts'].append({
+                    post_info = {
                         'title': post['title'],
                         'url': post['url'],
                         'logno': post['logno'],
                         'status': 'duplicate'
-                    })
+                    }
+                    stats['collected_posts'].append(post_info)
+                    if on_skip:
+                        on_skip(post_info)
                     logger.info(f"[{run_id}] 중복 내용 스킵: {post['title'][:50]}...")
                 else:
                     # updated
                     stats['new_posts'] += 1
-                    stats['collected_posts'].append({
+                    post_info = {
                         'title': post['title'],
                         'url': post['url'],
                         'logno': post['logno'],
                         'status': 'updated'
-                    })
+                    }
+                    stats['collected_posts'].append(post_info)
+                    if on_new:
+                        on_new(post_info)
                     logger.info(f"[{run_id}] 포스트 업데이트: {post['title'][:50]}...")
             
                 # 페이지 간 딜레이
